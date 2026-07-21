@@ -31,6 +31,13 @@ class CaptureSerializationTest < Minitest::Test
     assert_equal "future-format", options.format
   end
 
+  def test_capture_option_names_match_serializer_wire_names
+    attribute_names = ScreenshotScout::CaptureOptions.const_get(:ATTRIBUTE_NAMES, false)
+    wire_names = ScreenshotScout::Internal::Serializer.const_get(:WIRE_NAMES, false)
+
+    assert_equal wire_names.keys, attribute_names
+  end
+
   def test_post_is_default_and_serializes_the_complete_option_surface
     transport = RecordingTransport.new
     client = client(transport, access_key: "access-key")
@@ -131,6 +138,16 @@ class CaptureSerializationTest < Minitest::Test
     client(transport).capture("https://example.com", options)
 
     assert_equal({ "url" => "https://example.com" }, JSON.parse(transport.requests.fetch(0).body))
+  end
+
+  def test_explicit_nil_method_uses_the_post_default
+    transport = RecordingTransport.new
+
+    client(transport).capture("https://example.com", method: nil)
+
+    request = transport.requests.fetch(0)
+    assert_equal ScreenshotScout::CaptureHttpMethod::POST, request.method
+    assert_equal({ "url" => "https://example.com" }, JSON.parse(request.body))
   end
 
   def test_get_and_capture_url_preserve_repeated_values_and_credentials_policy

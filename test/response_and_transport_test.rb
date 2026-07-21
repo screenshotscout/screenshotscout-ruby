@@ -34,6 +34,17 @@ class ResponseAndTransportTest < Minitest::Test
     assert_equal ["a=1; Path=/", "b=2; Path=/"], response.raw_response.header("Set-Cookie")
   end
 
+  def test_empty_content_type_is_treated_as_binary
+    body = "\x01\x02".b
+    raw = TestResponses.binary(body: body, headers: { "content-type" => [""] })
+
+    response = client(RecordingTransport.new(raw)).capture("https://example.com")
+
+    assert_instance_of ScreenshotScout::BinaryCaptureResponse, response
+    assert_equal body, response.bytes
+    assert_equal "", response.raw_response.content_type
+  end
+
   def test_json_response_retains_documented_and_additional_fields
     body = JSON.generate(
       "screenshot_url" => "https://cdn.example/screenshot.png",

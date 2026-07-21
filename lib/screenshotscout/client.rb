@@ -22,6 +22,7 @@ module ScreenshotScout
     # Sends one GET or POST request and waits for the final inline response.
     def capture(url, options = nil, method: CaptureHttpMethod::POST)
       serialized = Internal::Serializer.serialize(url, options)
+      method = CaptureHttpMethod::POST if method.nil?
       validate_method(method)
       expected_kind = expected_response_kind(options)
       signature = create_signature(serialized.pairs)
@@ -220,7 +221,7 @@ module ScreenshotScout
     def json_media_type?(content_type)
       return false if content_type.nil?
 
-      media_type = content_type.split(";", 2).first.strip.downcase
+      media_type = content_type.partition(";").first.strip.downcase
       media_type == "application/json" || media_type.end_with?("+json")
     end
 

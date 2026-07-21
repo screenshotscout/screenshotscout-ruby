@@ -303,7 +303,7 @@ module ScreenshotScout
     def capture: (
       String url,
       ?CaptureOptions? options,
-      ?method: capture_http_method
+      ?method: capture_http_method?
     ) -> CaptureResponse
 
     def build_capture_url: (String url, ?CaptureOptions? options) -> String
