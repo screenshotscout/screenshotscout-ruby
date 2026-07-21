@@ -1,0 +1,350 @@
+module ScreenshotScout
+  VERSION: String
+
+  type capture_http_method = "GET" | "POST"
+  type number = Integer | Float
+  type json_value = nil | bool | Integer | Float | String | Array[json_value] | Hash[String, json_value]
+
+  module CaptureHttpMethod
+    GET: "GET"
+    POST: "POST"
+  end
+
+  module CaptureFormat
+    GIF: String
+    JPEG: String
+    JPG: String
+    PDF: String
+    PNG: String
+    TIFF: String
+    WEBP: String
+  end
+
+  module CaptureResponseType
+    BINARY: String
+    JSON: String
+  end
+
+  module CaptureWaitUntil
+    DOM_CONTENT_LOADED: String
+    LOAD: String
+    NETWORK_IDLE_0: String
+    NETWORK_IDLE_2: String
+  end
+
+  module CaptureMediaType
+    PRINT: String
+    SCREEN: String
+  end
+
+  module CaptureColorScheme
+    AUTO: String
+    DARK: String
+    LIGHT: String
+  end
+
+  module CaptureImageMode
+    FILL: String
+    FIT: String
+    STRETCH: String
+  end
+
+  module CaptureImageAnchor
+    BOTTOM: String
+    BOTTOM_LEFT: String
+    BOTTOM_RIGHT: String
+    CENTER: String
+    LEFT: String
+    RIGHT: String
+    TOP: String
+    TOP_LEFT: String
+    TOP_RIGHT: String
+  end
+
+  module CapturePdfPaperFormat
+    A3: String
+    A4: String
+    CONTENT: String
+    LEGAL: String
+    LETTER: String
+    TABLOID: String
+  end
+
+  module CaptureStorageMode
+    EXTERNAL: String
+    MANAGED: String
+  end
+
+  class CaptureOptions
+    attr_reader format: String?
+    attr_reader response_type: String?
+    attr_reader country: String?
+    attr_reader proxy: String?
+    attr_reader geolocation_latitude: number?
+    attr_reader geolocation_longitude: number?
+    attr_reader geolocation_accuracy: number?
+    attr_reader cookies: Array[String]?
+    attr_reader headers: Array[String]?
+    attr_reader timeout: Integer?
+    attr_reader wait_until: String?
+    attr_reader navigation_timeout: Integer?
+    attr_reader delay: Integer?
+    attr_reader device: String?
+    attr_reader device_viewport_width: Integer?
+    attr_reader device_viewport_height: Integer?
+    attr_reader device_scale_factor: number?
+    attr_reader device_is_mobile: bool?
+    attr_reader device_has_touch: bool?
+    attr_reader device_user_agent: String?
+    attr_reader timezone: String?
+    attr_reader media_type: String?
+    attr_reader color_scheme: String?
+    attr_reader reduced_motion: bool?
+    attr_reader full_page: bool?
+    attr_reader full_page_pre_scroll: bool?
+    attr_reader full_page_pre_scroll_step: Integer?
+    attr_reader full_page_pre_scroll_step_delay: Integer?
+    attr_reader full_page_max_height: Integer?
+    attr_reader block_cookie_banners: bool?
+    attr_reader block_ads: bool?
+    attr_reader block_chat_widgets: bool?
+    attr_reader hide_selectors: Array[String]?
+    attr_reader click_selectors: Array[String]?
+    attr_reader click_all_selectors: Array[String]?
+    attr_reader inject_css: Array[String]?
+    attr_reader inject_js: Array[String]?
+    attr_reader bypass_csp: bool?
+    attr_reader selector: String?
+    attr_reader clip_x: Integer?
+    attr_reader clip_y: Integer?
+    attr_reader clip_width: Integer?
+    attr_reader clip_height: Integer?
+    attr_reader image_width: Integer?
+    attr_reader image_height: Integer?
+    attr_reader image_mode: String?
+    attr_reader image_anchor: String?
+    attr_reader image_allow_upscale: bool?
+    attr_reader image_background: String?
+    attr_reader image_quality: Integer?
+    attr_reader pdf_paper_format: String?
+    attr_reader pdf_landscape: bool?
+    attr_reader pdf_print_background: bool?
+    attr_reader pdf_margin: String?
+    attr_reader pdf_margin_top: String?
+    attr_reader pdf_margin_right: String?
+    attr_reader pdf_margin_bottom: String?
+    attr_reader pdf_margin_left: String?
+    attr_reader pdf_scale: number?
+    attr_reader cache: bool?
+    attr_reader cache_ttl: Integer?
+    attr_reader cache_key: String?
+    attr_reader storage_mode: String?
+    attr_reader storage_endpoint: String?
+    attr_reader storage_bucket: String?
+    attr_reader storage_region: String?
+    attr_reader storage_object_key: String?
+
+    def initialize: (
+      ?format: String?,
+      ?response_type: String?,
+      ?country: String?,
+      ?proxy: String?,
+      ?geolocation_latitude: number?,
+      ?geolocation_longitude: number?,
+      ?geolocation_accuracy: number?,
+      ?cookies: Array[String]?,
+      ?headers: Array[String]?,
+      ?timeout: Integer?,
+      ?wait_until: String?,
+      ?navigation_timeout: Integer?,
+      ?delay: Integer?,
+      ?device: String?,
+      ?device_viewport_width: Integer?,
+      ?device_viewport_height: Integer?,
+      ?device_scale_factor: number?,
+      ?device_is_mobile: bool?,
+      ?device_has_touch: bool?,
+      ?device_user_agent: String?,
+      ?timezone: String?,
+      ?media_type: String?,
+      ?color_scheme: String?,
+      ?reduced_motion: bool?,
+      ?full_page: bool?,
+      ?full_page_pre_scroll: bool?,
+      ?full_page_pre_scroll_step: Integer?,
+      ?full_page_pre_scroll_step_delay: Integer?,
+      ?full_page_max_height: Integer?,
+      ?block_cookie_banners: bool?,
+      ?block_ads: bool?,
+      ?block_chat_widgets: bool?,
+      ?hide_selectors: Array[String]?,
+      ?click_selectors: Array[String]?,
+      ?click_all_selectors: Array[String]?,
+      ?inject_css: Array[String]?,
+      ?inject_js: Array[String]?,
+      ?bypass_csp: bool?,
+      ?selector: String?,
+      ?clip_x: Integer?,
+      ?clip_y: Integer?,
+      ?clip_width: Integer?,
+      ?clip_height: Integer?,
+      ?image_width: Integer?,
+      ?image_height: Integer?,
+      ?image_mode: String?,
+      ?image_anchor: String?,
+      ?image_allow_upscale: bool?,
+      ?image_background: String?,
+      ?image_quality: Integer?,
+      ?pdf_paper_format: String?,
+      ?pdf_landscape: bool?,
+      ?pdf_print_background: bool?,
+      ?pdf_margin: String?,
+      ?pdf_margin_top: String?,
+      ?pdf_margin_right: String?,
+      ?pdf_margin_bottom: String?,
+      ?pdf_margin_left: String?,
+      ?pdf_scale: number?,
+      ?cache: bool?,
+      ?cache_ttl: Integer?,
+      ?cache_key: String?,
+      ?storage_mode: String?,
+      ?storage_endpoint: String?,
+      ?storage_bucket: String?,
+      ?storage_region: String?,
+      ?storage_object_key: String?
+    ) -> void
+  end
+
+  class RawResponse
+    attr_reader status: Integer
+    attr_reader reason_phrase: String
+    attr_reader headers: Hash[String, Array[String]]
+    attr_reader content_type: String?
+    attr_reader body: String
+
+    def initialize: (
+      status: Integer,
+      reason_phrase: String,
+      headers: Hash[String, Array[String]],
+      content_type: String?,
+      body: String
+    ) -> void
+
+    def header: (String name) -> Array[String]
+  end
+
+  class CaptureResponse
+    attr_reader raw_response: RawResponse
+    def initialize: (raw_response: RawResponse) -> void
+  end
+
+  class BinaryCaptureResponse < CaptureResponse
+    attr_reader bytes: String
+    attr_reader screenshot_url: String?
+    attr_reader screenshot_url_expires_at: String?
+    attr_reader cache_status: String?
+
+    def initialize: (
+      raw_response: RawResponse,
+      screenshot_url: String?,
+      screenshot_url_expires_at: String?,
+      cache_status: String?
+    ) -> void
+  end
+
+  class CaptureResult
+    attr_reader screenshot_url: String?
+    attr_reader screenshot_url_expires_at: String?
+    attr_reader cache_status: String?
+    attr_reader additional_fields: Hash[String, json_value]
+
+    def initialize: (
+      screenshot_url: String?,
+      screenshot_url_expires_at: String?,
+      cache_status: String?,
+      additional_fields: Hash[String, json_value]
+    ) -> void
+  end
+
+  class JsonCaptureResponse < CaptureResponse
+    attr_reader result: CaptureResult
+    def initialize: (result: CaptureResult, raw_response: RawResponse) -> void
+  end
+
+  class TransportRequest
+    attr_reader method: capture_http_method
+    attr_reader url: String
+    attr_reader headers: Hash[String, String]
+    attr_reader body: String?
+
+    def initialize: (
+      method: capture_http_method,
+      url: String,
+      headers: Hash[String, String],
+      ?body: String?
+    ) -> void
+  end
+
+  interface _Transport
+    def call: (TransportRequest request) -> RawResponse
+  end
+
+  class NetHttpTransport
+    include _Transport
+  end
+
+  class Client
+    def initialize: (
+      access_key: String,
+      ?secret_key: String?,
+      ?transport: _Transport?
+    ) -> void
+
+    def capture: (
+      String url,
+      ?CaptureOptions? options,
+      ?method: capture_http_method
+    ) -> CaptureResponse
+
+    def build_capture_url: (String url, ?CaptureOptions? options) -> String
+  end
+
+  class Error < StandardError
+  end
+
+  class ConfigurationError < Error
+  end
+
+  class SerializationError < Error
+    attr_reader option: (String | Symbol)?
+    def initialize: (String message, ?option: (String | Symbol)?) -> void
+  end
+
+  class TransportError < Error
+  end
+
+  class APIError < Error
+    attr_reader status: Integer
+    attr_reader error_code: String?
+    attr_reader error_message: String?
+    attr_reader errors: Array[json_value]?
+    attr_reader response_body: json_value
+    attr_reader raw_response: RawResponse
+
+    def initialize: (
+      raw_response: RawResponse,
+      response_body_available: bool,
+      ?response_body: json_value,
+      ?error_code: String?,
+      ?error_message: String?,
+      ?errors: Array[json_value]?
+    ) -> void
+
+    def response_body?: () -> bool
+  end
+
+  class ResponseDecodingError < Error
+    attr_reader raw_response: RawResponse
+    def initialize: (String message, RawResponse raw_response) -> void
+  end
+end

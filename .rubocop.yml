@@ -2,3 +2,39 @@ AllCops:
   NewCops: enable
   SuggestExtensions: false
   TargetRubyVersion: 3.4
+
+Layout/EndOfLine:
+  EnforcedStyle: lf
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Gemspec/DevelopmentDependencies:
+  Enabled: false
+
+Metrics/AbcSize:
+  Max: 25
+  Exclude:
+    - "test/**/*"
+
+Metrics/ClassLength:
+  Max: 200
+  Exclude:
+    - "test/**/*"
+
+Metrics/CyclomaticComplexity:
+  Max: 10
+
+Metrics/MethodLength:
+  Max: 25
+  Exclude:
+    - "test/**/*"
+
+Metrics/ModuleLength:
+  Max: 210
+
+Metrics/ParameterLists:
+  Max: 6
+
+Metrics/PerceivedComplexity:
+  Max: 11

@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
+require_relative "lib/screenshotscout/version"
+
 Gem::Specification.new do |spec|
   spec.name = "screenshotscout"
-  spec.version = "0.1.0.rc1"
+  spec.version = ScreenshotScout::VERSION
   spec.authors = ["Oleksii Velykyi"]
 
   spec.summary = "Official Ruby SDK for the Screenshot Scout screenshot API."
@@ -21,6 +23,7 @@ Gem::Specification.new do |spec|
   spec.files = Dir[
     "LICENSE",
     "README.md",
+    "examples/**/*",
     "lib/**/*.rb",
     "sig/**/*.rbs"
   ]
