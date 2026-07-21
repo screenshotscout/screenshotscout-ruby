@@ -1,0 +1,25 @@
+# Bundler and packaged gems
+/.bundle/
+/vendor/bundle/
+/Gemfile.lock
+/pkg/
+*.gem
+
+# Test, analysis, formatting, and documentation output
+/coverage/
+/tmp/
+/.rubocop_cache/
+/.yardoc/
+/doc/
+
+# Editors and language tooling
+/.idea/
+/.ruby-lsp/
+/.vscode/
+*.swp
+
+# Local environment and operating-system files
+.env
+.env.*
+.DS_Store
+Thumbs.db
