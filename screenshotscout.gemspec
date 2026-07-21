@@ -8,7 +8,8 @@ Gem::Specification.new do |spec|
   spec.authors = ["Oleksii Velykyi"]
 
   spec.summary = "Official Ruby SDK for the Screenshot Scout screenshot API."
-  spec.description = "A small, manually written Ruby client for Screenshot Scout."
+  spec.description =
+    "Capture clean, production-ready website screenshots from Ruby applications with the official Screenshot Scout SDK."
   spec.homepage = "https://screenshotscout.com"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.4"
