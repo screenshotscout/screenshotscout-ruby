@@ -64,7 +64,8 @@ module ScreenshotScout
   module CapturePdfPaperFormat
     A3: String
     A4: String
-    CONTENT: String
+    A5: String
+    A6: String
     LEGAL: String
     LETTER: String
     TABLOID: String
@@ -135,6 +136,7 @@ module ScreenshotScout
     attr_reader pdf_margin_bottom: String?
     attr_reader pdf_margin_left: String?
     attr_reader pdf_scale: number?
+    attr_reader pdf_page_ranges: String?
     attr_reader cache: bool?
     attr_reader cache_ttl: Integer?
     attr_reader cache_key: String?
@@ -204,6 +206,7 @@ module ScreenshotScout
       ?pdf_margin_bottom: String?,
       ?pdf_margin_left: String?,
       ?pdf_scale: number?,
+      ?pdf_page_ranges: String?,
       ?cache: bool?,
       ?cache_ttl: Integer?,
       ?cache_key: String?,

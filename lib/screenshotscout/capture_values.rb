@@ -60,7 +60,8 @@ module ScreenshotScout
   module CapturePdfPaperFormat
     A3 = "a3"
     A4 = "a4"
-    CONTENT = "content"
+    A5 = "a5"
+    A6 = "a6"
     LEGAL = "legal"
     LETTER = "letter"
     TABLOID = "tabloid"

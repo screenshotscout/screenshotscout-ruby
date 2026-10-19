@@ -155,7 +155,7 @@ capture:
 - DOM changes: `hide_selectors`, `click_selectors`, `click_all_selectors`, `inject_css`, `inject_js`, `bypass_csp`
 - Framing: `selector`, `clip_x`, `clip_y`, `clip_width`, `clip_height`
 - Image output: `image_width`, `image_height`, `image_mode`, `image_anchor`, `image_allow_upscale`, `image_background`, `image_quality`
-- PDF: `pdf_paper_format`, `pdf_landscape`, `pdf_print_background`, `pdf_margin`, `pdf_margin_top`, `pdf_margin_right`, `pdf_margin_bottom`, `pdf_margin_left`, `pdf_scale`
+- PDF: `pdf_paper_format`, `pdf_landscape`, `pdf_print_background`, `pdf_margin`, `pdf_margin_top`, `pdf_margin_right`, `pdf_margin_bottom`, `pdf_margin_left`, `pdf_scale`, `pdf_page_ranges`
 - Caching: `cache`, `cache_ttl`, `cache_key`
 - Storage: `storage_mode`, `storage_endpoint`, `storage_bucket`, `storage_region`, `storage_object_key`
 

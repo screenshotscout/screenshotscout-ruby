@@ -67,6 +67,7 @@ module ScreenshotScout
         pdf_margin_bottom: "pdf_margin_bottom",
         pdf_margin_left: "pdf_margin_left",
         pdf_scale: "pdf_scale",
+        pdf_page_ranges: "pdf_page_ranges",
         cache: "cache",
         cache_ttl: "cache_ttl",
         cache_key: "cache_key",
