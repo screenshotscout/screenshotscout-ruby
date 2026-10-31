@@ -122,7 +122,7 @@ module ScreenshotScout
       end
 
       def encode_query(pairs)
-        pairs.map { |pair| "#{form_encode(pair.name)}=#{form_encode(pair.value)}" }.join("&")
+        pairs.map { |pair| "#{rfc3986_encode(pair.name)}=#{rfc3986_encode(pair.value)}" }.join("&")
       end
 
       def append_repeated(pairs, body, property, wire_name, value)
@@ -199,7 +199,11 @@ module ScreenshotScout
           raise SerializationError.new(message, option: property)
         end
 
-        value.encode(Encoding::UTF_8)
+        string = value.encode(Encoding::UTF_8)
+        # encode doesn't check the bytes of a string that is already tagged as UTF-8.
+        raise Encoding::InvalidByteSequenceError, "invalid byte sequence in UTF-8" unless string.valid_encoding?
+
+        string
       rescue EncodingError => e
         message = if target
                     "The capture target URL must contain valid UTF-8."
@@ -210,19 +214,18 @@ module ScreenshotScout
       end
       private_class_method :string_value
 
-      def form_encode(value)
+      # Percent-encodes UTF-8 bytes, leaving only the RFC 3986 unreserved characters as they are.
+      def rfc3986_encode(value)
         value.bytes.map do |byte|
           if byte.between?(65, 90) || byte.between?(97, 122) ||
-             byte.between?(48, 57) || [42, 45, 46, 95].include?(byte)
+             byte.between?(48, 57) || [45, 46, 95, 126].include?(byte)
             byte.chr
-          elsif byte == 32
-            "+"
           else
             format("%%%02X", byte)
           end
         end.join
       end
-      private_class_method :form_encode
+      private_class_method :rfc3986_encode
     end
   end
 end

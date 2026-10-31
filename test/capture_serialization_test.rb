@@ -175,21 +175,21 @@ class CaptureSerializationTest < Minitest::Test
     refute request.headers.key?("Content-Type")
     assert_equal "Bearer query-key", request.headers.fetch("Authorization")
     assert_equal(
-      "url=https%3A%2F%2Fexample.com%2Fa+path&cookies=a%3D1&cookies=a%3D1&" \
+      "url=https%3A%2F%2Fexample.com%2Fa%20path&cookies=a%3D1&cookies=a%3D1&" \
       "headers=X-Test%3Aone&headers=X-Test%3Aone&delay=0&full_page=false&cache_key=",
       URI.parse(request.url).query
     )
     refute_includes request.url, "access_key="
     assert_equal(
       "https://api.screenshotscout.com/v1/capture?access_key=query-key&" \
-      "url=https%3A%2F%2Fexample.com%2Fa+path&cookies=a%3D1&cookies=a%3D1&" \
+      "url=https%3A%2F%2Fexample.com%2Fa%20path&cookies=a%3D1&cookies=a%3D1&" \
       "headers=X-Test%3Aone&headers=X-Test%3Aone&delay=0&full_page=false&cache_key=",
       built
     )
     assert_equal 1, transport.requests.length
   end
 
-  def test_signatures_match_the_api_for_get_post_and_generated_urls
+  def test_signatures_match_the_api_for_get_and_generated_urls
     transport = RecordingTransport.new(TestResponses.json)
     screenshot_client = client(
       transport,
@@ -203,28 +203,44 @@ class CaptureSerializationTest < Minitest::Test
       headers: ["X-Test:one", "X-Test:two"]
     )
     target = "https://example.com/a b?x=1&y=2"
-    expected = "0c4928ba691575903f27b911b8ea1a536604ca070d60d886e10c127c05e236fc"
+    expected = "6419f2ac8c0440f1e341b547630606c9dc74dacfbb2df8e122fc9ae26831d893"
 
     screenshot_client.capture(target, options, method: ScreenshotScout::CaptureHttpMethod::GET)
-    screenshot_client.capture(target, options)
     built = screenshot_client.build_capture_url(target, options)
 
+    assert_equal 1, transport.requests.length
     assert_equal expected, query_values(transport.requests.fetch(0).url, "signature").first
-    assert_equal expected, JSON.parse(transport.requests.fetch(1).body).fetch("signature")
     assert_equal expected, query_values(built, "signature").first
     assert_equal "ak_test", query_values(built, "access_key").first
     refute_includes built, "sk_test"
     refute_includes transport.requests.fetch(0).url, "access_key="
-    refute JSON.parse(transport.requests.fetch(1).body).key?("access_key")
   end
 
-  def test_form_encoding_matches_the_documented_whatwg_rules
+  def test_signed_text_and_signatures_match_the_shared_vectors
+    path = File.expand_path("fixtures/signing-vectors.json", __dir__)
+    vectors = JSON.parse(File.read(path, encoding: "UTF-8")).fetch("vectors")
+
+    refute_empty vectors
+    vectors.each do |vector|
+      pairs = vector.fetch("params").map do |name, value|
+        ScreenshotScout::Internal::WirePair.new(name: name, value: value)
+      end
+      signed_text = ScreenshotScout::Internal::Serializer.build_canonical_query(pairs, vector.fetch("access_key"))
+      signature = OpenSSL::HMAC.hexdigest("SHA256", vector.fetch("secret_key"), signed_text)
+
+      assert_equal vector.fetch("signed_text"), signed_text, vector.fetch("name")
+      assert_equal vector.fetch("signature"), signature, vector.fetch("name")
+    end
+  end
+
+  def test_query_encoding_follows_rfc3986
     transport = RecordingTransport.new
     screenshot_client = client(transport, access_key: "ak_test", secret_key: "sk_test")
     options = ScreenshotScout::CaptureOptions.new(
       format: "a*b~c",
       hide_selectors: ["div > *", "~"],
-      selector: "*~"
+      selector: "*~",
+      cache_key: "!'()+é"
     )
 
     screenshot_client.capture(
@@ -234,11 +250,12 @@ class CaptureSerializationTest < Minitest::Test
     )
 
     query = URI.parse(transport.requests.fetch(0).url).query
-    assert_includes query, "url=https%3A%2F%2Fexample.com%2F%7E+*"
-    assert_includes query, "format=a*b%7Ec"
-    assert_includes query, "hide_selectors=div+%3E+*"
-    assert_includes query, "hide_selectors=%7E"
-    assert_includes query, "selector=*%7E"
+    assert_includes query, "url=https%3A%2F%2Fexample.com%2F~%20%2A"
+    assert_includes query, "format=a%2Ab~c"
+    assert_includes query, "hide_selectors=div%20%3E%20%2A"
+    assert_includes query, "hide_selectors=~"
+    assert_includes query, "selector=%2A~"
+    assert_includes query, "cache_key=%21%27%28%29%2B%C3%A9"
   end
 
   def test_floating_point_options_use_ecmascript_formatting
@@ -276,18 +293,47 @@ class CaptureSerializationTest < Minitest::Test
     end
   end
 
-  def test_signed_post_with_a_whole_float_matches_api_canonicalization
+  def test_client_with_a_secret_key_refuses_post_before_calling_the_transport
     transport = RecordingTransport.new
     screenshot_client = client(transport, access_key: "ak_test", secret_key: "sk_test")
-    options = ScreenshotScout::CaptureOptions.new(pdf_scale: 2.0)
+    captures = [
+      -> { screenshot_client.capture("https://example.com") },
+      -> { screenshot_client.capture("https://example.com", method: nil) },
+      -> { screenshot_client.capture("https://example.com", method: ScreenshotScout::CaptureHttpMethod::POST) }
+    ]
 
-    screenshot_client.capture("https://example.com", options)
+    captures.each do |capture|
+      error = assert_raises(ScreenshotScout::ConfigurationError, &capture)
+      assert_equal(
+        "POST requests can't be signed. This client has a secret key: send this capture with method GET, " \
+        "or use a client without a secret key and an API key that doesn't require signed requests.",
+        error.message
+      )
+    end
+    assert_empty transport.requests
+  end
 
-    assert_equal(
-      '{"url":"https://example.com","pdf_scale":2,' \
-      '"signature":"9455e37a8893f7a2e43d5bdf8203986139f66f768bd7ccebb8c8df80604a9683"}',
-      transport.requests.fetch(0).body
-    )
+  def test_text_that_is_not_valid_utf8_is_rejected_with_the_option_name
+    transport = RecordingTransport.new
+    screenshot_client = client(transport, access_key: "ak_test", secret_key: "sk_test")
+    invalid = "caf\xC3".dup.force_encoding(Encoding::UTF_8)
+
+    url_error = assert_raises(ScreenshotScout::SerializationError) do
+      screenshot_client.build_capture_url("https://example.com/#{invalid}")
+    end
+    option_error = assert_raises(ScreenshotScout::SerializationError) do
+      screenshot_client.capture(
+        "https://example.com",
+        ScreenshotScout::CaptureOptions.new(hide_selectors: [invalid]),
+        method: ScreenshotScout::CaptureHttpMethod::GET
+      )
+    end
+
+    assert_equal :url, url_error.option
+    assert_equal "The capture target URL must contain valid UTF-8.", url_error.message
+    assert_equal :hide_selectors, option_error.option
+    assert_equal "The capture option \"hide_selectors\" must contain valid UTF-8.", option_error.message
+    assert_empty transport.requests
   end
 
   def test_unsafe_values_fail_before_calling_the_transport

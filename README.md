@@ -29,7 +29,7 @@ gem install screenshotscout
 store them securely. The access key is required. The secret key is optional and enables
 [signed requests](#signed-requests).
 
-The examples below read `SCREENSHOTSCOUT_ACCESS_KEY` and, when available,
+The examples below read `SCREENSHOTSCOUT_ACCESS_KEY` and, where they sign,
 `SCREENSHOTSCOUT_SECRET_KEY` from environment variables.
 
 ## Capture a screenshot
@@ -40,10 +40,7 @@ the full page and saves the returned image:
 ```ruby
 require "screenshotscout"
 
-client = ScreenshotScout::Client.new(
-  access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"),
-  secret_key: ENV.fetch("SCREENSHOTSCOUT_SECRET_KEY", nil)
-)
+client = ScreenshotScout::Client.new(access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"))
 response = client.capture(
   "https://example.com",
   ScreenshotScout::CaptureOptions.new(full_page: true)
@@ -64,10 +61,7 @@ image or PDF output:
 ```ruby
 require "screenshotscout"
 
-client = ScreenshotScout::Client.new(
-  access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"),
-  secret_key: ENV.fetch("SCREENSHOTSCOUT_SECRET_KEY", nil)
-)
+client = ScreenshotScout::Client.new(access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"))
 options = ScreenshotScout::CaptureOptions.new(
   response_type: ScreenshotScout::CaptureResponseType::JSON
 )
@@ -122,8 +116,9 @@ on the [API Keys page](https://screenshotscout.com/app/api-keys).
 
 ## Signed requests
 
-Pass the API key's secret key to sign GET requests, POST requests, and generated capture URLs
-automatically. The secret is used locally and is never transmitted.
+Pass the API key's secret key to sign generated capture URLs and GET requests automatically. The
+secret is used locally and is never transmitted. POST requests can't be signed, so capture with
+`method: CaptureHttpMethod::GET`:
 
 ```ruby
 require "screenshotscout"
@@ -133,7 +128,10 @@ client = ScreenshotScout::Client.new(
   secret_key: ENV.fetch("SCREENSHOTSCOUT_SECRET_KEY")
 )
 
-response = client.capture("https://example.com")
+response = client.capture(
+  "https://example.com",
+  method: ScreenshotScout::CaptureHttpMethod::GET
+)
 File.binwrite("signed-screenshot.png", response.bytes)
 ```
 
@@ -164,10 +162,7 @@ Use the provided constants for documented values, or pass a string:
 ```ruby
 require "screenshotscout"
 
-client = ScreenshotScout::Client.new(
-  access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"),
-  secret_key: ENV.fetch("SCREENSHOTSCOUT_SECRET_KEY", nil)
-)
+client = ScreenshotScout::Client.new(access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"))
 options = ScreenshotScout::CaptureOptions.new(
   format: ScreenshotScout::CaptureFormat::WEBP,
   wait_until: ScreenshotScout::CaptureWaitUntil::LOAD
@@ -240,7 +235,6 @@ end
 
 client = ScreenshotScout::Client.new(
   access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"),
-  secret_key: ENV.fetch("SCREENSHOTSCOUT_SECRET_KEY", nil),
   transport: ApplicationTransport.new(open_timeout: 10, read_timeout: 300)
 )
 
@@ -256,10 +250,7 @@ headers, content type, and body. `APIError` provides the same response details.
 ```ruby
 require "screenshotscout"
 
-client = ScreenshotScout::Client.new(
-  access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"),
-  secret_key: ENV.fetch("SCREENSHOTSCOUT_SECRET_KEY", nil)
-)
+client = ScreenshotScout::Client.new(access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"))
 
 begin
   client.capture("https://example.com")

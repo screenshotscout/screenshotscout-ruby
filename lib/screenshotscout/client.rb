@@ -19,11 +19,13 @@ module ScreenshotScout
       @transport = transport || NetHttpTransport.new
     end
 
-    # Sends one GET or POST request and waits for the final inline response.
+    # Sends one GET or POST request and waits for the final inline response. A client with a secret key
+    # signs GET requests and raises ConfigurationError for POST, because POST requests can't be signed.
     def capture(url, options = nil, method: CaptureHttpMethod::POST)
       serialized = Internal::Serializer.serialize(url, options)
       method = CaptureHttpMethod::POST if method.nil?
       validate_method(method)
+      reject_signed_post(method)
       expected_kind = expected_response_kind(options)
       signature = create_signature(serialized.pairs)
       request = create_request(serialized, method, signature)
@@ -76,6 +78,14 @@ module ScreenshotScout
       )
     end
 
+    def reject_signed_post(method)
+      return if @secret_key.nil? || method != CaptureHttpMethod::POST
+
+      raise ConfigurationError,
+            "POST requests can't be signed. This client has a secret key: send this capture with method GET, " \
+            "or use a client without a secret key and an API key that doesn't require signed requests."
+    end
+
     def create_signature(pairs)
       return nil if @secret_key.nil?
 
@@ -95,14 +105,12 @@ module ScreenshotScout
         url = "#{CAPTURE_ENDPOINT}?#{Internal::Serializer.encode_query(pairs)}"
         TransportRequest.new(method: method, url: url, headers: headers)
       else
-        body = serialized.body.dup
-        body["signature"] = signature unless signature.nil?
         headers["Content-Type"] = "application/json"
         TransportRequest.new(
           method: method,
           url: CAPTURE_ENDPOINT,
           headers: headers,
-          body: Internal::JsonCodec.encode_wire_object(body)
+          body: Internal::JsonCodec.encode_wire_object(serialized.body)
         )
       end
     rescue Error
