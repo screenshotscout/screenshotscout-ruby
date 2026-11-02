@@ -21,13 +21,14 @@ module ScreenshotScout
 
   # Small default adapter. It owns each Net::HTTP session that it opens.
   class NetHttpTransport
+    # Longer than the longest capture Screenshot Scout allows (240 seconds). Net::HTTP waits 60.
+    READ_TIMEOUT_SECONDS = 300
+    private_constant :READ_TIMEOUT_SECONDS
+
     def call(request)
       uri = URI.parse(request.url)
       net_request = build_request(uri, request)
-      http = Net::HTTP.new(uri.host, uri.port, nil)
-      http.use_ssl = uri.scheme == "https"
-      http.max_retries = 0
-      response = http.start { |session| session.request(net_request) }
+      response = build_session(uri).start { |session| session.request(net_request) }
 
       RawResponse.new(
         status: response.code.to_i,
@@ -39,6 +40,14 @@ module ScreenshotScout
     end
 
     private
+
+    def build_session(uri)
+      http = Net::HTTP.new(uri.host, uri.port, nil)
+      http.use_ssl = uri.scheme == "https"
+      http.read_timeout = READ_TIMEOUT_SECONDS
+      http.max_retries = 0
+      http
+    end
 
     def build_request(uri, request)
       net_request = case request.method

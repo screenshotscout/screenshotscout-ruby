@@ -181,7 +181,8 @@ for service behavior and allowed values.
 The `timeout` capture option controls how long Screenshot Scout may spend capturing the page. It
 does not configure your application's HTTP timeout.
 
-Most applications can use the default `NetHttpTransport`. To customize HTTP timeouts, proxies,
+Most applications can use the default `NetHttpTransport`. It waits up to 300 seconds for response
+data, longer than the longest capture Screenshot Scout allows. To customize HTTP timeouts, proxies,
 TLS, or logging, pass an object with a `call(request)` method. It receives a `TransportRequest` and
 returns a `RawResponse`:
 

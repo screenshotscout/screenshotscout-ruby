@@ -257,6 +257,14 @@ class ResponseAndTransportTest < Minitest::Test
     server_thread&.join(2)
   end
 
+  def test_default_net_http_adapter_waits_longer_than_the_longest_capture
+    uri = URI("https://api.screenshotscout.com/v1/capture")
+
+    session = ScreenshotScout::NetHttpTransport.new.send(:build_session, uri)
+
+    assert_equal 300, session.read_timeout
+  end
+
   private
 
   def client(transport)
