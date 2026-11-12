@@ -3,8 +3,14 @@
 require_relative "test_helper"
 
 class CaptureSerializationTest < Minitest::Test
+  include EnvironmentHelper
+
+  # The request in test_signatures_match_the_api_for_get_and_generated_urls, signed with ak_test and sk_test.
+  SIGNED_TARGET = "https://example.com/a b?x=1&y=2"
+  SIGNED_SIGNATURE = "6419f2ac8c0440f1e341b547630606c9dc74dacfbb2df8e122fc9ae26831d893"
+
   def test_configuration_validates_credentials_and_transport
-    assert_raises(ScreenshotScout::ConfigurationError) { ScreenshotScout::Client.new }
+    assert_raises(ScreenshotScout::ConfigurationError) { ScreenshotScout::Client.new(access_key: 123) }
     assert_raises(ScreenshotScout::ConfigurationError) do
       ScreenshotScout::Client.new(access_key: "   ")
     end
@@ -141,7 +147,7 @@ class CaptureSerializationTest < Minitest::Test
     assert_equal({ "url" => "https://example.com" }, JSON.parse(transport.requests.fetch(0).body))
   end
 
-  def test_explicit_nil_method_uses_the_post_default
+  def test_explicit_nil_method_uses_the_post_default_without_a_secret_key
     transport = RecordingTransport.new
 
     client(transport).capture("https://example.com", method: nil)
@@ -196,21 +202,13 @@ class CaptureSerializationTest < Minitest::Test
       access_key: "ak_test",
       secret_key: "sk_test"
     )
-    options = ScreenshotScout::CaptureOptions.new(
-      response_type: ScreenshotScout::CaptureResponseType::JSON,
-      full_page: false,
-      delay: 0,
-      headers: ["X-Test:one", "X-Test:two"]
-    )
-    target = "https://example.com/a b?x=1&y=2"
-    expected = "6419f2ac8c0440f1e341b547630606c9dc74dacfbb2df8e122fc9ae26831d893"
 
-    screenshot_client.capture(target, options, method: ScreenshotScout::CaptureHttpMethod::GET)
-    built = screenshot_client.build_capture_url(target, options)
+    screenshot_client.capture(SIGNED_TARGET, signed_options, method: ScreenshotScout::CaptureHttpMethod::GET)
+    built = screenshot_client.build_capture_url(SIGNED_TARGET, signed_options)
 
     assert_equal 1, transport.requests.length
-    assert_equal expected, query_values(transport.requests.fetch(0).url, "signature").first
-    assert_equal expected, query_values(built, "signature").first
+    assert_equal SIGNED_SIGNATURE, query_values(transport.requests.fetch(0).url, "signature").first
+    assert_equal SIGNED_SIGNATURE, query_values(built, "signature").first
     assert_equal "ak_test", query_values(built, "access_key").first
     refute_includes built, "sk_test"
     refute_includes transport.requests.fetch(0).url, "access_key="
@@ -293,24 +291,131 @@ class CaptureSerializationTest < Minitest::Test
     end
   end
 
-  def test_client_with_a_secret_key_refuses_post_before_calling_the_transport
+  def test_client_with_a_secret_key_refuses_an_explicit_post_before_calling_the_transport
     transport = RecordingTransport.new
     screenshot_client = client(transport, access_key: "ak_test", secret_key: "sk_test")
-    captures = [
-      -> { screenshot_client.capture("https://example.com") },
-      -> { screenshot_client.capture("https://example.com", method: nil) },
-      -> { screenshot_client.capture("https://example.com", method: ScreenshotScout::CaptureHttpMethod::POST) }
-    ]
 
-    captures.each do |capture|
-      error = assert_raises(ScreenshotScout::ConfigurationError, &capture)
-      assert_equal(
-        "POST requests can't be signed. This client has a secret key: send this capture with method GET, " \
-        "or use a client without a secret key and an API key that doesn't require signed requests.",
-        error.message
-      )
+    error = assert_raises(ScreenshotScout::ConfigurationError) do
+      screenshot_client.capture("https://example.com", method: ScreenshotScout::CaptureHttpMethod::POST)
     end
+
+    assert_equal(
+      "POST requests can't be signed. This client has a secret key: send this capture with method GET, " \
+      "or use a client without a secret key and an API key that doesn't require signed requests.",
+      error.message
+    )
     assert_empty transport.requests
+  end
+
+  def test_client_with_a_secret_key_sends_a_signed_get_when_no_method_is_chosen
+    [{}, { method: nil }].each do |method_argument|
+      transport = RecordingTransport.new(TestResponses.json)
+      screenshot_client = client(transport, access_key: "ak_test", secret_key: "sk_test")
+
+      screenshot_client.capture(SIGNED_TARGET, signed_options, **method_argument)
+
+      request = transport.requests.fetch(0)
+      assert_equal ScreenshotScout::CaptureHttpMethod::GET, request.method
+      assert_nil request.body
+      assert_equal SIGNED_SIGNATURE, query_values(request.url, "signature").first
+    end
+  end
+
+  def test_without_keys_the_client_reads_both_environment_variables_once
+    transport = RecordingTransport.new(TestResponses.json)
+
+    with_env(
+      "SCREENSHOTSCOUT_ACCESS_KEY" => "ak_test",
+      "SCREENSHOTSCOUT_SECRET_KEY" => "sk_test"
+    ) do
+      screenshot_client = ScreenshotScout::Client.new(transport: transport)
+      ENV["SCREENSHOTSCOUT_ACCESS_KEY"] = "changed"
+      ENV["SCREENSHOTSCOUT_SECRET_KEY"] = "changed"
+
+      screenshot_client.capture(SIGNED_TARGET, signed_options)
+    end
+
+    request = transport.requests.fetch(0)
+    assert_equal ScreenshotScout::CaptureHttpMethod::GET, request.method
+    assert_equal "Bearer ak_test", request.headers.fetch("Authorization")
+    assert_equal SIGNED_SIGNATURE, query_values(request.url, "signature").first
+  end
+
+  def test_a_client_with_no_arguments_reads_the_environment_and_an_empty_secret_counts_as_unset
+    with_env("SCREENSHOTSCOUT_ACCESS_KEY" => "ak_env", "SCREENSHOTSCOUT_SECRET_KEY" => "") do
+      url = ScreenshotScout::Client.new.build_capture_url("https://example.com")
+
+      assert_equal ["ak_env"], query_values(url, "access_key")
+      assert_empty query_values(url, "signature")
+    end
+  end
+
+  def test_passing_either_key_means_the_environment_is_never_read
+    with_env(
+      "SCREENSHOTSCOUT_ACCESS_KEY" => "ak_env",
+      "SCREENSHOTSCOUT_SECRET_KEY" => "sk_env"
+    ) do
+      transport = RecordingTransport.new
+      ScreenshotScout::Client.new(access_key: "ak_code", transport: transport).capture("https://example.com")
+
+      request = transport.requests.fetch(0)
+      assert_equal ScreenshotScout::CaptureHttpMethod::POST, request.method
+      assert_equal "Bearer ak_code", request.headers.fetch("Authorization")
+
+      [{ secret_key: "sk_code" }, { access_key: "" }].each do |keys|
+        error = assert_raises(ScreenshotScout::ConfigurationError) { ScreenshotScout::Client.new(**keys) }
+        assert_equal "A non-blank Screenshot Scout access key is required.", error.message
+      end
+    end
+  end
+
+  def test_a_missing_access_key_names_the_environment_variable
+    error = assert_raises(ScreenshotScout::ConfigurationError) { ScreenshotScout::Client.new }
+
+    assert_equal(
+      "A non-blank Screenshot Scout access key is required. Pass one, or set SCREENSHOTSCOUT_ACCESS_KEY.",
+      error.message
+    )
+  end
+
+  def test_an_explicit_post_names_the_variable_a_secret_key_came_from
+    transport = RecordingTransport.new
+
+    error = with_env(
+      "SCREENSHOTSCOUT_ACCESS_KEY" => "ak_env",
+      "SCREENSHOTSCOUT_SECRET_KEY" => "sk_env"
+    ) do
+      screenshot_client = ScreenshotScout::Client.new(transport: transport)
+      assert_raises(ScreenshotScout::ConfigurationError) do
+        screenshot_client.capture("https://example.com", method: ScreenshotScout::CaptureHttpMethod::POST)
+      end
+    end
+
+    assert_equal(
+      "POST requests can't be signed. This client has a secret key from SCREENSHOTSCOUT_SECRET_KEY: " \
+      "send this capture with method GET, or use a client without a secret key and an API key that " \
+      "doesn't require signed requests.",
+      error.message
+    )
+    assert_empty transport.requests
+  end
+
+  def test_inspect_and_pp_leave_out_both_keys
+    transport = RecordingTransport.new
+    screenshot_client = client(transport, access_key: "ak_test", secret_key: "sk_test")
+    screenshot_client.capture("https://example.com")
+    request = transport.requests.fetch(0)
+
+    assert_equal "#<ScreenshotScout::Client>", screenshot_client.inspect
+    assert_includes request.inspect, "[FILTERED]"
+    [screenshot_client, request].each do |object|
+      printed, = capture_io { pp object }
+
+      [object.inspect, printed].each do |output|
+        refute_includes output, "ak_test"
+        refute_includes output, "sk_test"
+      end
+    end
   end
 
   def test_text_that_is_not_valid_utf8_is_rejected_with_the_option_name
@@ -378,6 +483,15 @@ class CaptureSerializationTest < Minitest::Test
 
   def query_values(url, name)
     URI.decode_www_form(URI.parse(url).query).filter_map { |key, value| value if key == name }
+  end
+
+  def signed_options
+    ScreenshotScout::CaptureOptions.new(
+      response_type: ScreenshotScout::CaptureResponseType::JSON,
+      full_page: false,
+      delay: 0,
+      headers: ["X-Test:one", "X-Test:two"]
+    )
   end
 
   def complete_wire_options

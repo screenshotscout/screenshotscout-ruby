@@ -14,21 +14,21 @@ From the repository root, install the dependencies:
 bundle install
 ```
 
-Set your access key. To sign the URL that `capture_url.rb` prints, also set the optional secret
-key.
+Set your access key. If you also set the optional secret key, the client signs its requests and the
+URL that `capture_url.rb` prints.
 
 PowerShell:
 
 ```powershell
 $env:SCREENSHOTSCOUT_ACCESS_KEY = "YOUR_ACCESS_KEY"
-$env:SCREENSHOTSCOUT_SECRET_KEY = "YOUR_SECRET_KEY" # Optional, used by capture_url.rb
+$env:SCREENSHOTSCOUT_SECRET_KEY = "YOUR_SECRET_KEY" # Optional
 ```
 
 macOS or Linux:
 
 ```shell
 export SCREENSHOTSCOUT_ACCESS_KEY="YOUR_ACCESS_KEY"
-export SCREENSHOTSCOUT_SECRET_KEY="YOUR_SECRET_KEY" # Optional, used by capture_url.rb
+export SCREENSHOTSCOUT_SECRET_KEY="YOUR_SECRET_KEY" # Optional
 ```
 
 Run any example:

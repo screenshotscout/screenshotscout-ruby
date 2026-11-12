@@ -7,25 +7,29 @@ module ScreenshotScout
   class Client
     CAPTURE_ENDPOINT = "https://api.screenshotscout.com/v1/capture"
     ACCESS_KEY_PATTERN = %r{\A[A-Za-z0-9\-._~+/]+=*\z}
-    MISSING_ACCESS_KEY = Object.new.freeze
 
-    def initialize(access_key: MISSING_ACCESS_KEY, secret_key: nil, transport: nil)
-      validate_access_key(access_key)
-      validate_secret_key(secret_key)
+    # Creates a client. When no key is passed, the client reads SCREENSHOTSCOUT_ACCESS_KEY and, if it's set,
+    # SCREENSHOTSCOUT_SECRET_KEY. Passing either key means neither variable is read.
+    def initialize(access_key: nil, secret_key: nil, transport: nil)
+      credentials = Internal::Credentials.resolve(access_key, secret_key, environment: ENV)
+      validate_access_key(credentials.access_key)
+      validate_secret_key(credentials.secret_key)
       validate_transport(transport)
 
-      @access_key = access_key.dup.freeze
-      @secret_key = secret_key&.dup&.freeze
+      @access_key = credentials.access_key.dup.freeze
+      @secret_key = credentials.secret_key&.dup&.freeze
+      @secret_key_from_environment = credentials.from_environment && !@secret_key.nil?
       @transport = transport || NetHttpTransport.new
     end
 
-    # Sends one GET or POST request and waits for the final inline response. A client with a secret key
-    # signs GET requests and raises ConfigurationError for POST, because POST requests can't be signed.
-    def capture(url, options = nil, method: CaptureHttpMethod::POST)
+    # Sends one GET or POST request and waits for the final inline response. The method defaults to POST,
+    # or GET when the client has a secret key, because POST requests can't be signed. A client with a secret
+    # key signs GET requests and raises ConfigurationError for an explicit POST.
+    def capture(url, options = nil, method: nil)
       serialized = Internal::Serializer.serialize(url, options)
-      method = CaptureHttpMethod::POST if method.nil?
-      validate_method(method)
+      validate_method(method) unless method.nil?
       reject_signed_post(method)
+      method ||= @secret_key.nil? ? CaptureHttpMethod::POST : CaptureHttpMethod::GET
       expected_kind = expected_response_kind(options)
       signature = create_signature(serialized.pairs)
       request = create_request(serialized, method, signature)
@@ -43,6 +47,11 @@ module ScreenshotScout
       pairs = [Internal::WirePair.new(name: "access_key", value: @access_key), *serialized.pairs]
       pairs << Internal::WirePair.new(name: "signature", value: signature) unless signature.nil?
       "#{CAPTURE_ENDPOINT}?#{Internal::Serializer.encode_query(pairs)}"
+    end
+
+    # Leaves out the keys, so that printing or logging a client doesn't reveal them.
+    def inspect
+      "#<#{self.class.name}>"
     end
 
     private
@@ -81,9 +90,10 @@ module ScreenshotScout
     def reject_signed_post(method)
       return if @secret_key.nil? || method != CaptureHttpMethod::POST
 
+      source = @secret_key_from_environment ? " from #{Internal::Credentials::SECRET_KEY_VARIABLE}" : ""
       raise ConfigurationError,
-            "POST requests can't be signed. This client has a secret key: send this capture with method GET, " \
-            "or use a client without a secret key and an API key that doesn't require signed requests."
+            "POST requests can't be signed. This client has a secret key#{source}: send this capture with " \
+            "method GET, or use a client without a secret key and an API key that doesn't require signed requests."
     end
 
     def create_signature(pairs)
@@ -233,6 +243,6 @@ module ScreenshotScout
       media_type == "application/json" || media_type.end_with?("+json")
     end
 
-    private_constant :CAPTURE_ENDPOINT, :ACCESS_KEY_PATTERN, :MISSING_ACCESS_KEY
+    private_constant :CAPTURE_ENDPOINT, :ACCESS_KEY_PATTERN
   end
 end

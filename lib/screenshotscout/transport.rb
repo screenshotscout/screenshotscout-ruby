@@ -17,6 +17,13 @@ module ScreenshotScout
       @body = body&.dup&.freeze
       freeze
     end
+
+    # Shows the Authorization header, which carries the access key, as [FILTERED].
+    def inspect
+      headers = @headers.to_h { |name, value| [name, name.casecmp?("Authorization") ? "[FILTERED]" : value] }
+      "#<#{self.class.name} method=#{@method.inspect} url=#{@url.inspect} headers=#{headers.inspect} " \
+        "body=#{@body.inspect}>"
+    end
   end
 
   # Small default adapter. It owns each Net::HTTP session that it opens.

@@ -25,12 +25,11 @@ gem install screenshotscout
 ## Get your API credentials
 
 [Sign up for Screenshot Scout](https://screenshotscout.com/auth/signup) or sign in, then open the
-[API Keys page](https://screenshotscout.com/app/api-keys). Copy the access key and secret key and
-store them securely. The access key is required. The secret key is optional and enables
-[signed requests](#signed-requests).
+[API Keys page](https://screenshotscout.com/app/api-keys) and copy the access key. You only need the
+secret key for [signed requests](#signed-requests).
 
-The examples below read `SCREENSHOTSCOUT_ACCESS_KEY` and, where they sign,
-`SCREENSHOTSCOUT_SECRET_KEY` from environment variables.
+Set the access key as the `SCREENSHOTSCOUT_ACCESS_KEY` environment variable, or
+[pass it in code](#pass-the-keys-yourself).
 
 ## Capture a screenshot
 
@@ -40,7 +39,7 @@ the full page and saves the returned image:
 ```ruby
 require "screenshotscout"
 
-client = ScreenshotScout::Client.new(access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"))
+client = ScreenshotScout::Client.new # Reads SCREENSHOTSCOUT_ACCESS_KEY
 response = client.capture(
   "https://example.com",
   ScreenshotScout::CaptureOptions.new(full_page: true)
@@ -50,8 +49,8 @@ File.binwrite("screenshot.png", response.bytes)
 puts response.screenshot_url
 ```
 
-`capture` uses POST by default and returns a `BinaryCaptureResponse` when `response_type` is
-omitted or set to `CaptureResponseType::BINARY`.
+`capture` uses POST by default, or GET when the client has a secret key. It returns a
+`BinaryCaptureResponse` when `response_type` is omitted or set to `CaptureResponseType::BINARY`.
 
 ## Request a JSON result
 
@@ -61,7 +60,7 @@ image or PDF output:
 ```ruby
 require "screenshotscout"
 
-client = ScreenshotScout::Client.new(access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"))
+client = ScreenshotScout::Client.new # Reads SCREENSHOTSCOUT_ACCESS_KEY
 options = ScreenshotScout::CaptureOptions.new(
   response_type: ScreenshotScout::CaptureResponseType::JSON
 )
@@ -74,15 +73,13 @@ Unrecognized JSON result fields are retained in `response.result.additional_fiel
 
 ## Use GET
 
-POST is used by default. Pass `CaptureHttpMethod::GET` when you need a GET request:
+POST is the default, or GET when the client has a secret key. Pass `CaptureHttpMethod::GET` when
+you need a GET request:
 
 ```ruby
 require "screenshotscout"
 
-client = ScreenshotScout::Client.new(
-  access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"),
-  secret_key: ENV.fetch("SCREENSHOTSCOUT_SECRET_KEY", nil)
-)
+client = ScreenshotScout::Client.new # Reads SCREENSHOTSCOUT_ACCESS_KEY
 options = ScreenshotScout::CaptureOptions.new(format: ScreenshotScout::CaptureFormat::WEBP)
 response = client.capture(
   "https://example.com",
@@ -101,41 +98,51 @@ load the screenshot directly. It creates the URL without sending an API request:
 ```ruby
 require "screenshotscout"
 
-client = ScreenshotScout::Client.new(
-  access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"),
-  secret_key: ENV.fetch("SCREENSHOTSCOUT_SECRET_KEY", nil)
-)
+client = ScreenshotScout::Client.new # Reads SCREENSHOTSCOUT_ACCESS_KEY
 options = ScreenshotScout::CaptureOptions.new(full_page: true, block_ads: true)
 capture_url = client.build_capture_url("https://example.com", options)
 puts capture_url
 ```
 
-The generated URL contains the access key. Treat it as sensitive. Before exposing generated URLs
+The generated URL contains the access key. When the client has a secret key, the URL is signed
+automatically; otherwise it is unsigned. Treat it as sensitive. Before exposing generated URLs
 to browsers or users, configure a secret key and enable **Require signed requests** for the API key
 on the [API Keys page](https://screenshotscout.com/app/api-keys).
 
 ## Signed requests
 
-Pass the API key's secret key to sign generated capture URLs and GET requests automatically. The
-secret is used locally and is never transmitted. POST requests can't be signed, so capture with
-`method: CaptureHttpMethod::GET`:
+Set the API key's secret key as the `SCREENSHOTSCOUT_SECRET_KEY` environment variable. The client
+then signs its capture requests and the capture URLs it builds, with no change to your code:
+
+```ruby
+require "screenshotscout"
+
+client = ScreenshotScout::Client.new # Reads SCREENSHOTSCOUT_ACCESS_KEY and SCREENSHOTSCOUT_SECRET_KEY
+
+response = client.capture("https://example.com")
+File.binwrite("signed-screenshot.png", response.bytes)
+```
+
+The secret key is used locally and is never transmitted. See the
+[signed requests guide](https://screenshotscout.com/docs/signed-requests) for details.
+
+## Pass the keys yourself
+
+To use keys from somewhere other than the environment, such as a secrets manager or per-customer
+settings, pass them to the client:
 
 ```ruby
 require "screenshotscout"
 
 client = ScreenshotScout::Client.new(
-  access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"),
-  secret_key: ENV.fetch("SCREENSHOTSCOUT_SECRET_KEY")
+  access_key: config.access_key,
+  secret_key: config.secret_key # optional
 )
-
-response = client.capture(
-  "https://example.com",
-  method: ScreenshotScout::CaptureHttpMethod::GET
-)
-File.binwrite("signed-screenshot.png", response.bytes)
 ```
 
-See the [signed requests guide](https://screenshotscout.com/docs/signed-requests) for details.
+If you pass either key, the client reads neither environment variable. If you pass no key, for
+example because the variable holding it is `nil`, the client reads both environment variables
+instead.
 
 ## Capture options
 
@@ -162,7 +169,7 @@ Use the provided constants for documented values, or pass a string:
 ```ruby
 require "screenshotscout"
 
-client = ScreenshotScout::Client.new(access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"))
+client = ScreenshotScout::Client.new # Reads SCREENSHOTSCOUT_ACCESS_KEY
 options = ScreenshotScout::CaptureOptions.new(
   format: ScreenshotScout::CaptureFormat::WEBP,
   wait_until: ScreenshotScout::CaptureWaitUntil::LOAD
@@ -234,10 +241,8 @@ class ApplicationTransport
   end
 end
 
-client = ScreenshotScout::Client.new(
-  access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"),
-  transport: ApplicationTransport.new(open_timeout: 10, read_timeout: 300)
-)
+transport = ApplicationTransport.new(open_timeout: 10, read_timeout: 300)
+client = ScreenshotScout::Client.new(transport: transport) # Reads SCREENSHOTSCOUT_ACCESS_KEY
 
 response = client.capture("https://example.com")
 File.binwrite("screenshot.png", response.bytes)
@@ -251,7 +256,7 @@ headers, content type, and body. `APIError` provides the same response details.
 ```ruby
 require "screenshotscout"
 
-client = ScreenshotScout::Client.new(access_key: ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY"))
+client = ScreenshotScout::Client.new # Reads SCREENSHOTSCOUT_ACCESS_KEY
 
 begin
   client.capture("https://example.com")

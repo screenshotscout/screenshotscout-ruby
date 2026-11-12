@@ -6,6 +6,23 @@ require "json"
 require "minitest/autorun"
 require "screenshotscout"
 
+# Keys set in the developer's own environment must not reach these tests.
+ENV.delete("SCREENSHOTSCOUT_ACCESS_KEY")
+ENV.delete("SCREENSHOTSCOUT_SECRET_KEY")
+
+module EnvironmentHelper
+  private
+
+  # Runs the block with the given variables set, then restores ENV as it was.
+  def with_env(values)
+    saved = ENV.to_h
+    ENV.update(values)
+    yield
+  ensure
+    ENV.replace(saved)
+  end
+end
+
 class RecordingTransport
   attr_reader :requests
 

@@ -2,8 +2,7 @@
 
 require "screenshotscout"
 
-access_key = ENV.fetch("SCREENSHOTSCOUT_ACCESS_KEY")
-client = ScreenshotScout::Client.new(access_key: access_key)
+client = ScreenshotScout::Client.new # Reads SCREENSHOTSCOUT_ACCESS_KEY
 options = ScreenshotScout::CaptureOptions.new(full_page: true)
 response = client.capture("https://example.com", options)
 

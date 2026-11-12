@@ -286,6 +286,8 @@ module ScreenshotScout
       headers: Hash[String, String],
       ?body: String?
     ) -> void
+
+    def inspect: () -> String
   end
 
   interface _Transport
@@ -298,7 +300,7 @@ module ScreenshotScout
 
   class Client
     def initialize: (
-      access_key: String,
+      ?access_key: String?,
       ?secret_key: String?,
       ?transport: _Transport?
     ) -> void
@@ -310,6 +312,8 @@ module ScreenshotScout
     ) -> CaptureResponse
 
     def build_capture_url: (String url, ?CaptureOptions? options) -> String
+
+    def inspect: () -> String
   end
 
   class Error < StandardError
