@@ -302,6 +302,7 @@ module ScreenshotScout
     def initialize: (
       ?access_key: String?,
       ?secret_key: String?,
+      ?base_url: String?,
       ?transport: _Transport?
     ) -> void
 

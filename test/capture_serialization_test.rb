@@ -400,6 +400,101 @@ class CaptureSerializationTest < Minitest::Test
     assert_empty transport.requests
   end
 
+  def test_a_base_url_sends_post_get_and_built_urls_to_that_server
+    transport = RecordingTransport.new
+    screenshot_client = client(transport, access_key: "ak_test", base_url: "http://localhost:8787/")
+
+    screenshot_client.capture("https://example.com")
+    screenshot_client.capture("https://example.com", method: ScreenshotScout::CaptureHttpMethod::GET)
+
+    assert_equal "http://localhost:8787/v1/capture", transport.requests.fetch(0).url
+    assert_equal "http://localhost:8787/v1/capture?url=https%3A%2F%2Fexample.com", transport.requests.fetch(1).url
+    assert_equal(
+      "http://localhost:8787/v1/capture?access_key=ak_test&url=https%3A%2F%2Fexample.com",
+      screenshot_client.build_capture_url("https://example.com")
+    )
+  end
+
+  def test_a_base_url_keeps_its_path_and_leaves_signing_unchanged
+    transport = RecordingTransport.new(TestResponses.json)
+    screenshot_client = client(
+      transport,
+      access_key: "ak_test",
+      secret_key: "sk_test",
+      base_url: "https://proxy.example.com/screenshotscout//"
+    )
+
+    screenshot_client.capture(SIGNED_TARGET, signed_options)
+    built = screenshot_client.build_capture_url(SIGNED_TARGET, signed_options)
+
+    [transport.requests.fetch(0).url, built].each do |url|
+      assert_equal "https://proxy.example.com/screenshotscout/v1/capture", url.partition("?").first
+      assert_equal SIGNED_SIGNATURE, query_values(url, "signature").first
+    end
+  end
+
+  def test_an_empty_base_url_means_the_screenshot_scout_api_and_a_non_string_one_is_an_error
+    ["", nil].each do |base_url|
+      transport = RecordingTransport.new
+
+      client(transport, base_url: base_url).capture("https://example.com")
+
+      assert_equal "https://api.screenshotscout.com/v1/capture", transport.requests.fetch(0).url
+    end
+
+    [1, URI("https://proxy.example.com")].each do |base_url|
+      error = assert_raises(ScreenshotScout::ConfigurationError) { client(RecordingTransport.new, base_url: base_url) }
+
+      assert_equal "The Screenshot Scout base URL must be a string when provided.", error.message
+    end
+  end
+
+  def test_without_a_base_url_the_client_reads_screenshotscout_base_url_once_even_with_keys_passed
+    transport = RecordingTransport.new
+
+    built = with_env(
+      "SCREENSHOTSCOUT_ACCESS_KEY" => "ak_env",
+      "SCREENSHOTSCOUT_BASE_URL" => "http://localhost:8787"
+    ) do
+      clients = [ScreenshotScout::Client.new(transport: transport), client(transport, access_key: "ak_code")]
+      ENV["SCREENSHOTSCOUT_BASE_URL"] = "http://changed.example"
+
+      clients.each { |screenshot_client| screenshot_client.capture("https://example.com") }
+      clients.map { |screenshot_client| screenshot_client.build_capture_url("https://example.com") }
+    end
+
+    assert_equal ["http://localhost:8787/v1/capture"] * 2, transport.requests.map(&:url)
+    assert_equal(
+      [
+        "http://localhost:8787/v1/capture?access_key=ak_env&url=https%3A%2F%2Fexample.com",
+        "http://localhost:8787/v1/capture?access_key=ak_code&url=https%3A%2F%2Fexample.com"
+      ],
+      built
+    )
+  end
+
+  def test_a_base_url_passed_in_code_wins_over_screenshotscout_base_url
+    transport = RecordingTransport.new
+
+    with_env("SCREENSHOTSCOUT_BASE_URL" => "http://localhost:8787") do
+      client(transport, base_url: "https://proxy.example.com").capture("https://example.com")
+    end
+
+    assert_equal "https://proxy.example.com/v1/capture", transport.requests.fetch(0).url
+  end
+
+  def test_an_empty_screenshotscout_base_url_means_the_screenshot_scout_api_and_a_blank_one_is_an_error
+    transport = RecordingTransport.new
+
+    with_env("SCREENSHOTSCOUT_BASE_URL" => "") { client(transport).capture("https://example.com") }
+    error = with_env("SCREENSHOTSCOUT_BASE_URL" => " \t") do
+      assert_raises(ScreenshotScout::ConfigurationError) { client(RecordingTransport.new) }
+    end
+
+    assert_equal "https://api.screenshotscout.com/v1/capture", transport.requests.fetch(0).url
+    assert_equal "SCREENSHOTSCOUT_BASE_URL is set but blank.", error.message
+  end
+
   def test_inspect_and_pp_leave_out_both_keys
     transport = RecordingTransport.new
     screenshot_client = client(transport, access_key: "ak_test", secret_key: "sk_test")
@@ -473,10 +568,11 @@ class CaptureSerializationTest < Minitest::Test
 
   private
 
-  def client(transport, access_key: "key", secret_key: nil)
+  def client(transport, access_key: "key", secret_key: nil, base_url: nil)
     ScreenshotScout::Client.new(
       access_key: access_key,
       secret_key: secret_key,
+      base_url: base_url,
       transport: transport
     )
   end

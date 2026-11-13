@@ -5,6 +5,8 @@ require "socket"
 require_relative "test_helper"
 
 class ResponseAndTransportTest < Minitest::Test
+  include EnvironmentHelper
+
   def test_binary_response_retains_bytes_metadata_and_raw_response
     body = "\x00\x01\x02\xFF".b
     raw = TestResponses.binary(
@@ -208,6 +210,40 @@ class ResponseAndTransportTest < Minitest::Test
     assert_instance_of TypeError, error.cause
   end
 
+  def test_a_transport_failure_names_screenshotscout_base_url_only_when_the_base_url_came_from_it
+    cause = IOError.new("connection refused")
+    transport = Object.new
+    transport.define_singleton_method(:call) { |_request| raise cause }
+    message = "Screenshot Scout request failed before a complete HTTP response body was received."
+    base_url_variable = { "SCREENSHOTSCOUT_BASE_URL" => "http://localhost:8787" }
+
+    [
+      [base_url_variable, nil, "#{message} The base URL comes from SCREENSHOTSCOUT_BASE_URL."],
+      [base_url_variable, "http://localhost:8787", message],
+      [{}, nil, message]
+    ].each do |environment, base_url, expected_message|
+      screenshot_client = with_env(environment) { client(transport, base_url: base_url) }
+
+      error = assert_raises(ScreenshotScout::TransportError) { screenshot_client.capture("https://example.com") }
+
+      assert_equal expected_message, error.message
+      assert_same cause, error.cause
+    end
+  end
+
+  def test_a_base_url_that_cannot_be_parsed_fails_as_a_transport_error_and_built_urls_use_it_as_given
+    screenshot_client = ScreenshotScout::Client.new(access_key: "key", base_url: "not a url")
+
+    error = assert_raises(ScreenshotScout::TransportError) { screenshot_client.capture("https://example.com") }
+
+    # The default transport parses the URL before it opens a connection, so nothing was sent.
+    assert_instance_of URI::InvalidURIError, error.cause
+    assert_equal(
+      "not a url/v1/capture?access_key=key&url=https%3A%2F%2Fexample.com",
+      screenshot_client.build_capture_url("https://example.com")
+    )
+  end
+
   def test_default_net_http_adapter_buffers_response_and_ignores_environment_proxy
     server = TCPServer.new("127.0.0.1", 0)
     port = server.addr.fetch(1)
@@ -267,7 +303,7 @@ class ResponseAndTransportTest < Minitest::Test
 
   private
 
-  def client(transport)
-    ScreenshotScout::Client.new(access_key: "key", transport: transport)
+  def client(transport, base_url: nil)
+    ScreenshotScout::Client.new(access_key: "key", base_url: base_url, transport: transport)
   end
 end

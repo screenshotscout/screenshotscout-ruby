@@ -6,9 +6,10 @@ require "json"
 require "minitest/autorun"
 require "screenshotscout"
 
-# Keys set in the developer's own environment must not reach these tests.
+# Variables set in the developer's own environment must not reach these tests.
 ENV.delete("SCREENSHOTSCOUT_ACCESS_KEY")
 ENV.delete("SCREENSHOTSCOUT_SECRET_KEY")
+ENV.delete("SCREENSHOTSCOUT_BASE_URL")
 
 module EnvironmentHelper
   private

@@ -5,20 +5,25 @@ require "openssl"
 module ScreenshotScout
   # Reusable blocking client for the inline Screenshot Scout capture operation.
   class Client
-    CAPTURE_ENDPOINT = "https://api.screenshotscout.com/v1/capture"
     ACCESS_KEY_PATTERN = %r{\A[A-Za-z0-9\-._~+/]+=*\z}
 
     # Creates a client. When no key is passed, the client reads SCREENSHOTSCOUT_ACCESS_KEY and, if it's set,
-    # SCREENSHOTSCOUT_SECRET_KEY. Passing either key means neither variable is read.
-    def initialize(access_key: nil, secret_key: nil, transport: nil)
+    # SCREENSHOTSCOUT_SECRET_KEY. Passing either key means neither variable is read. Pass base_url to send
+    # requests to another server, such as your own proxy or a mock server: captures go to that URL plus
+    # /v1/capture, and build_capture_url builds URLs on it. When no base URL is passed, the client reads
+    # SCREENSHOTSCOUT_BASE_URL, and without it uses the Screenshot Scout API.
+    def initialize(access_key: nil, secret_key: nil, base_url: nil, transport: nil)
       credentials = Internal::Credentials.resolve(access_key, secret_key, environment: ENV)
       validate_access_key(credentials.access_key)
       validate_secret_key(credentials.secret_key)
       validate_transport(transport)
+      endpoint = Internal::Credentials.resolve_base_url(base_url, environment: ENV)
 
       @access_key = credentials.access_key.dup.freeze
       @secret_key = credentials.secret_key&.dup&.freeze
       @secret_key_from_environment = credentials.from_environment && !@secret_key.nil?
+      @capture_endpoint = endpoint.capture_endpoint
+      @base_url_from_environment = endpoint.from_environment
       @transport = transport || NetHttpTransport.new
     end
 
@@ -46,7 +51,7 @@ module ScreenshotScout
       signature = create_signature(serialized.pairs)
       pairs = [Internal::WirePair.new(name: "access_key", value: @access_key), *serialized.pairs]
       pairs << Internal::WirePair.new(name: "signature", value: signature) unless signature.nil?
-      "#{CAPTURE_ENDPOINT}?#{Internal::Serializer.encode_query(pairs)}"
+      "#{@capture_endpoint}?#{Internal::Serializer.encode_query(pairs)}"
     end
 
     # Leaves out the keys, so that printing or logging a client doesn't reveal them.
@@ -112,13 +117,13 @@ module ScreenshotScout
       if method == CaptureHttpMethod::GET
         pairs = serialized.pairs.dup
         pairs << Internal::WirePair.new(name: "signature", value: signature) unless signature.nil?
-        url = "#{CAPTURE_ENDPOINT}?#{Internal::Serializer.encode_query(pairs)}"
+        url = "#{@capture_endpoint}?#{Internal::Serializer.encode_query(pairs)}"
         TransportRequest.new(method: method, url: url, headers: headers)
       else
         headers["Content-Type"] = "application/json"
         TransportRequest.new(
           method: method,
-          url: CAPTURE_ENDPOINT,
+          url: @capture_endpoint,
           headers: headers,
           body: Internal::JsonCodec.encode_wire_object(serialized.body)
         )
@@ -137,7 +142,9 @@ module ScreenshotScout
     rescue Error
       raise
     rescue StandardError => e
-      raise TransportError, "Screenshot Scout request failed before a complete HTTP response body was received.",
+      source = @base_url_from_environment ? " The base URL comes from #{Internal::Credentials::BASE_URL_VARIABLE}." : ""
+      raise TransportError,
+            "Screenshot Scout request failed before a complete HTTP response body was received.#{source}",
             cause: e
     end
 
@@ -243,6 +250,6 @@ module ScreenshotScout
       media_type == "application/json" || media_type.end_with?("+json")
     end
 
-    private_constant :CAPTURE_ENDPOINT, :ACCESS_KEY_PATTERN
+    private_constant :ACCESS_KEY_PATTERN
   end
 end

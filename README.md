@@ -144,6 +144,20 @@ If you pass either key, the client reads neither environment variable. If you pa
 example because the variable holding it is `nil`, the client reads both environment variables
 instead.
 
+## Send requests to another server
+
+To send requests to another server, such as your own proxy or a mock server, pass its base URL, or
+set it as the `SCREENSHOTSCOUT_BASE_URL` environment variable:
+
+```ruby
+require "screenshotscout"
+
+client = ScreenshotScout::Client.new(base_url: "https://proxy.example.com") # Reads SCREENSHOTSCOUT_ACCESS_KEY
+```
+
+The client sends captures to the base URL plus `/v1/capture`, and `build_capture_url` builds URLs on
+it. A base URL you pass wins over the variable.
+
 ## Capture options
 
 The target URL is the first argument to `capture`. Use snake_case keywords to customize the
