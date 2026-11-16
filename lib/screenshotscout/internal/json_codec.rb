@@ -16,7 +16,7 @@ module ScreenshotScout
       end
 
       def parse(body)
-        JSON.parse(body, create_additions: false)
+        JSON.parse(body)
       end
 
       def encode_wire_value(value)
