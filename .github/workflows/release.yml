@@ -1,0 +1,161 @@
+# Publishes the screenshotscout gem to RubyGems.org when a vX.Y.Z tag is pushed,
+# then creates the GitHub release from the tag message's body.
+#
+# Running it by hand (Actions > Release > Run workflow) is a dry run: it tests and
+# builds the gem, and never publishes. Give it the new version to also check
+# version.rb. Tick "check credentials" to confirm that RubyGems.org trusts this
+# workflow (it gets a short-lived key and pushes nothing).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Dry run only: fail unless version.rb says this version (for example 1.2.3)"
+        required: false
+        type: string
+      check_credentials:
+        description: "Also check RubyGems.org trusted publishing for the release environment (publishes nothing)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Gemfile.lock is gitignored, so Bundler resolves the dev dependencies (including minitest) here.
+      - uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+
+      - run: bundle exec rake test
+
+      - name: Check that version.rb has the release version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then expected="${GITHUB_REF_NAME#v}"; else expected="$INPUT_VERSION"; fi
+          actual="$(ruby -r ./lib/screenshotscout/version -e 'print ScreenshotScout::VERSION')"
+          echo "version.rb version: $actual"
+          if [[ -n "$expected" && "$actual" != "$expected" ]]; then
+            echo "::error::version.rb says $actual, but the release is $expected."
+            exit 1
+          fi
+
+      - run: gem build screenshotscout.gemspec
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: gem
+          path: screenshotscout-*.gem
+          if-no-files-found: error
+
+      - name: Read the release notes from the tag
+        if: github.event_name == 'push'
+        run: |
+          # Fetch the tag object itself, so an annotated tag stays annotated.
+          git fetch --force --no-tags origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          if [[ "$(git cat-file -t "refs/tags/${GITHUB_REF_NAME}")" != "tag" ]]; then
+            echo "::error::${GITHUB_REF_NAME} isn't an annotated tag, so it has no release notes. Create it with git tag -a."
+            exit 1
+          fi
+          git for-each-ref "refs/tags/${GITHUB_REF_NAME}" --format='%(contents:body)' > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::error::Tag ${GITHUB_REF_NAME} has no release notes. Write them in the tag message, below the subject line."
+            exit 1
+          fi
+          cat release-notes.md
+
+      - if: github.event_name == 'push'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  # Manual runs only: proves RubyGems.org trusts this workflow by getting a key, which is never used.
+  credentials:
+    if: github.event_name == 'workflow_dispatch' && inputs.check_credentials
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - uses: rubygems/configure-rubygems-credentials@dc5a8d8553e6ee01fc26761a49e99e733d17954a # v2.1.0
+      - run: echo "RubyGems.org accepted the trusted publisher."
+
+  publish:
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
+        with:
+          ruby-version: "3.4"
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: gem
+
+      # Trusted publishing: no API key and no OTP, even though the gem requires MFA.
+      - uses: rubygems/configure-rubygems-credentials@dc5a8d8553e6ee01fc26761a49e99e733d17954a # v2.1.0
+
+      - name: Push the gem
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if curl -fsS https://rubygems.org/api/v1/versions/screenshotscout.json \
+            | jq -e --arg v "$version" 'any(.[]; .number == $v)' >/dev/null; then
+            echo "screenshotscout $version is already on RubyGems."
+            exit 0
+          fi
+          gem push "screenshotscout-$version.gem"
+
+      - name: Wait until RubyGems serves the new version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          for _ in $(seq 1 60); do
+            if curl -fsS https://rubygems.org/api/v1/versions/screenshotscout.json \
+              | jq -e --arg v "$version" 'any(.[]; .number == $v)' >/dev/null; then
+              echo "screenshotscout $version is live on RubyGems."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::screenshotscout $version isn't visible on RubyGems after 10 minutes."
+          exit 1
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "The GitHub release for $GITHUB_REF_NAME already exists."
+            exit 0
+          fi
+          flags=()
+          if [[ "$version" =~ [a-z] ]]; then flags+=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "Screenshot Scout Ruby SDK $version" --notes-file release-notes.md "${flags[@]}"
