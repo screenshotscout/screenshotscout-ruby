@@ -30,10 +30,28 @@ class ResponseAndTransportTest < Minitest::Test
     assert_equal "https://cdn.example/screenshot.png", response.screenshot_url
     assert_equal "2026-07-14T00:00:00Z", response.screenshot_url_expires_at
     assert_equal "HIT", response.cache_status
+    assert_nil response.markdown
     assert_equal 201, response.raw_response.status
     assert_equal "Created", response.raw_response.reason_phrase
     assert_equal "image/png", response.raw_response.content_type
     assert_equal ["a=1; Path=/", "b=2; Path=/"], response.raw_response.header("Set-Cookie")
+  end
+
+  def test_markdown_response_provides_the_decoded_text
+    body = "# Привет\n\nHello, world.\n".b
+    options = ScreenshotScout::CaptureOptions.new(format: ScreenshotScout::CaptureFormat::MD)
+
+    ["text/markdown; charset=utf-8", "TEXT/MARKDOWN"].each do |content_type|
+      raw = TestResponses.binary(body: body, headers: { "content-type" => [content_type] })
+
+      response = client(RecordingTransport.new(raw)).capture("https://example.com", options)
+
+      assert_instance_of ScreenshotScout::BinaryCaptureResponse, response
+      assert_equal "# Привет\n\nHello, world.\n", response.markdown
+      assert_equal Encoding::UTF_8, response.markdown.encoding
+      assert_equal body, response.bytes
+      assert_same response.raw_response.body, response.bytes
+    end
   end
 
   def test_empty_content_type_is_treated_as_binary

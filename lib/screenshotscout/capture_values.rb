@@ -10,6 +10,7 @@ module ScreenshotScout
     GIF = "gif"
     JPEG = "jpeg"
     JPG = "jpg"
+    MD = "md"
     PDF = "pdf"
     PNG = "png"
     TIFF = "tiff"

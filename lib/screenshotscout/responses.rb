@@ -43,16 +43,17 @@ module ScreenshotScout
     end
   end
 
-  # Successful binary capture, including response metadata and image/PDF bytes.
+  # Successful binary capture, including response metadata and image, PDF, or Markdown bytes.
   class BinaryCaptureResponse < CaptureResponse
-    attr_reader :bytes, :screenshot_url, :screenshot_url_expires_at, :cache_status
+    attr_reader :bytes, :screenshot_url, :screenshot_url_expires_at, :cache_status, :markdown
 
-    def initialize(raw_response:, screenshot_url:, screenshot_url_expires_at:, cache_status:)
+    def initialize(raw_response:, screenshot_url:, screenshot_url_expires_at:, cache_status:, markdown: nil)
       super(raw_response: raw_response)
       @bytes = raw_response.body
       @screenshot_url = screenshot_url
       @screenshot_url_expires_at = screenshot_url_expires_at
       @cache_status = cache_status
+      @markdown = markdown
       freeze
     end
   end

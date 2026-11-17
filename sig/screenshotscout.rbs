@@ -14,6 +14,7 @@ module ScreenshotScout
     GIF: String
     JPEG: String
     JPG: String
+    MD: String
     PDF: String
     PNG: String
     TIFF: String
@@ -246,12 +247,14 @@ module ScreenshotScout
     attr_reader screenshot_url: String?
     attr_reader screenshot_url_expires_at: String?
     attr_reader cache_status: String?
+    attr_reader markdown: String?
 
     def initialize: (
       raw_response: RawResponse,
       screenshot_url: String?,
       screenshot_url_expires_at: String?,
-      cache_status: String?
+      cache_status: String?,
+      ?markdown: String?
     ) -> void
   end
 
