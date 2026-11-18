@@ -51,29 +51,12 @@ puts response.screenshot_url
 
 `capture` uses POST by default, or GET when the client has a secret key. It returns a
 `BinaryCaptureResponse` when `response_type` is omitted or set to `CaptureResponseType::BINARY`.
-
-## Get a page as Markdown
-
-Set `format` to `CaptureFormat::MD` to get the page as Markdown:
-
-```ruby
-require "screenshotscout"
-
-client = ScreenshotScout::Client.new # Reads SCREENSHOTSCOUT_ACCESS_KEY
-response = client.capture(
-  "https://example.com",
-  ScreenshotScout::CaptureOptions.new(format: ScreenshotScout::CaptureFormat::MD)
-)
-
-File.write("page.md", response.markdown)
-```
-
-`markdown` returns the Markdown text as a UTF-8 string, or `nil` for other formats.
+With `CaptureFormat::MD` or `CaptureFormat::HTML`, the text is also in `markdown` or `html`.
 
 ## Request a JSON result
 
 Set `response_type` to `CaptureResponseType::JSON` to receive capture metadata instead of binary
-image, PDF, or Markdown output:
+image, PDF, Markdown, or HTML output:
 
 ```ruby
 require "screenshotscout"

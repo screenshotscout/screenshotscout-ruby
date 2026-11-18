@@ -31,6 +31,7 @@ class ResponseAndTransportTest < Minitest::Test
     assert_equal "2026-07-14T00:00:00Z", response.screenshot_url_expires_at
     assert_equal "HIT", response.cache_status
     assert_nil response.markdown
+    assert_nil response.html
     assert_equal 201, response.raw_response.status
     assert_equal "Created", response.raw_response.reason_phrase
     assert_equal "image/png", response.raw_response.content_type
@@ -49,6 +50,25 @@ class ResponseAndTransportTest < Minitest::Test
       assert_instance_of ScreenshotScout::BinaryCaptureResponse, response
       assert_equal "# Привет\n\nHello, world.\n", response.markdown
       assert_equal Encoding::UTF_8, response.markdown.encoding
+      assert_nil response.html
+      assert_equal body, response.bytes
+      assert_same response.raw_response.body, response.bytes
+    end
+  end
+
+  def test_html_response_provides_the_decoded_text
+    body = "<h1>Привет</h1>\n<p>Hello, world.</p>\n".b
+    options = ScreenshotScout::CaptureOptions.new(format: ScreenshotScout::CaptureFormat::HTML)
+
+    ["text/html; charset=utf-8", "TEXT/HTML; charset=UTF-8"].each do |content_type|
+      raw = TestResponses.binary(body: body, headers: { "content-type" => [content_type] })
+
+      response = client(RecordingTransport.new(raw)).capture("https://example.com", options)
+
+      assert_instance_of ScreenshotScout::BinaryCaptureResponse, response
+      assert_equal "<h1>Привет</h1>\n<p>Hello, world.</p>\n", response.html
+      assert_equal Encoding::UTF_8, response.html.encoding
+      assert_nil response.markdown
       assert_equal body, response.bytes
       assert_same response.raw_response.body, response.bytes
     end

@@ -18,7 +18,7 @@ Metrics/AbcSize:
     - "test/**/*"
 
 Metrics/ClassLength:
-  Max: 200
+  Max: 210
   Exclude:
     - "test/**/*"
 

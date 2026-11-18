@@ -174,7 +174,8 @@ module ScreenshotScout
         screenshot_url: raw_response.header("Screenshot-Scout-Screenshot-URL").first,
         screenshot_url_expires_at: raw_response.header("Screenshot-Scout-Screenshot-URL-Expires-At").first,
         cache_status: raw_response.header("Screenshot-Scout-Cache-Status").first,
-        markdown: markdown_media_type?(raw_response.content_type) ? utf8_text(raw_response.body) : nil
+        markdown: markdown_media_type?(raw_response.content_type) ? utf8_text(raw_response.body) : nil,
+        html: html_media_type?(raw_response.content_type) ? utf8_text(raw_response.body) : nil
       )
     end
 
@@ -252,6 +253,8 @@ module ScreenshotScout
     end
 
     def markdown_media_type?(content_type) = content_type.to_s.partition(";").first.strip.downcase == "text/markdown"
+
+    def html_media_type?(content_type) = content_type.to_s.partition(";").first.strip.downcase == "text/html"
 
     def utf8_text(bytes) = bytes.dup.force_encoding(Encoding::UTF_8).scrub
 

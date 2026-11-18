@@ -8,6 +8,7 @@ module ScreenshotScout
 
   module CaptureFormat
     GIF = "gif"
+    HTML = "html"
     JPEG = "jpeg"
     JPG = "jpg"
     MD = "md"

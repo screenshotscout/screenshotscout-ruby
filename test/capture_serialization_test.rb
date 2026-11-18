@@ -33,6 +33,7 @@ class CaptureSerializationTest < Minitest::Test
     assert_predicate ScreenshotScout::CaptureHttpMethod::POST, :frozen?
     assert_predicate ScreenshotScout::CaptureFormat::WEBP, :frozen?
     assert_equal "md", ScreenshotScout::CaptureFormat::MD
+    assert_equal "html", ScreenshotScout::CaptureFormat::HTML
 
     options = ScreenshotScout::CaptureOptions.new(format: "future-format")
     assert_equal "future-format", options.format
