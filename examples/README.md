@@ -5,6 +5,8 @@
 - [`json.rb`](json.rb) requests a JSON response and prints the screenshot URL.
 - [`capture_url.rb`](capture_url.rb) creates and prints a capture URL without sending an API
   request.
+- [`html.rb`](html.rb) renders an invoice to PDF, saves it as `invoice.pdf`, and prints the
+  returned screenshot URL.
 
 ## Run the examples
 
@@ -15,7 +17,8 @@ bundle install
 ```
 
 Set your access key. If you also set the optional secret key, the client signs its requests and the
-URL that `capture_url.rb` prints.
+URL that `capture_url.rb` prints. `html.rb` sends the HTML in a POST request, which can't be
+signed, so run it without `SCREENSHOTSCOUT_SECRET_KEY`.
 
 PowerShell:
 
@@ -37,6 +40,7 @@ Run any example:
 bundle exec ruby -Ilib examples/binary.rb
 bundle exec ruby -Ilib examples/json.rb
 bundle exec ruby -Ilib examples/capture_url.rb
+bundle exec ruby -Ilib examples/html.rb
 ```
 
 Generated capture URLs contain the access key and should be treated as sensitive.

@@ -318,6 +318,8 @@ module ScreenshotScout
       ?method: capture_http_method?
     ) -> CaptureResponse
 
+    def capture_from_html: (String html, ?CaptureOptions? options) -> CaptureResponse
+
     def build_capture_url: (String url, ?CaptureOptions? options) -> String
 
     def inspect: () -> String

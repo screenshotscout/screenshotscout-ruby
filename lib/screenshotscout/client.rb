@@ -35,14 +35,17 @@ module ScreenshotScout
       validate_method(method) unless method.nil?
       reject_signed_post(method)
       method ||= @secret_key.nil? ? CaptureHttpMethod::POST : CaptureHttpMethod::GET
-      expected_kind = expected_response_kind(options)
-      signature = create_signature(serialized.pairs)
-      request = create_request(serialized, method, signature)
-      raw_response = execute_request(request)
+      send_capture(serialized, method, options)
+    end
 
-      raise create_api_error(raw_response) unless raw_response.status.between?(200, 299)
-
-      decode_success_response(raw_response, expected_kind)
+    # Captures an HTML document instead of a URL, such as an invoice or a report you generated. Sends the HTML
+    # exactly as given, in one POST request, and waits for the final inline response. A binary string, such as the
+    # result of File.binread or an HTTP response body, is read as UTF-8. A client with a secret key raises
+    # ConfigurationError, because POST requests can't be signed.
+    def capture_from_html(html, options = nil)
+      serialized = Internal::Serializer.serialize(html, options, target: :html)
+      reject_signed_html
+      send_capture(serialized, CaptureHttpMethod::POST, options)
     end
 
     # Builds a sensitive GET capture URL without performing network I/O.
@@ -101,6 +104,21 @@ module ScreenshotScout
             "method GET, or use a client without a secret key and an API key that doesn't require signed requests."
     end
 
+    def reject_signed_html
+      return if @secret_key.nil?
+
+      source = @secret_key_from_environment ? " from #{Internal::Credentials::SECRET_KEY_VARIABLE}" : ""
+      raise ConfigurationError,
+            "`capture_from_html` sends the HTML in a POST body, which can't be signed. This client has a secret " \
+            "key#{source}: use a client without a secret key and an API key that doesn't require signed requests."
+    end
+
+    def send_capture(serialized, method, options)
+      signature = create_signature(serialized.pairs)
+      request = create_request(serialized, method, signature)
+      Internal::ResponseDecoder.decode(execute_request(request), options)
+    end
+
     def create_signature(pairs)
       return nil if @secret_key.nil?
 
@@ -147,116 +165,6 @@ module ScreenshotScout
             "Screenshot Scout request failed before a complete HTTP response body was received.#{source}",
             cause: e
     end
-
-    def expected_response_kind(options)
-      response_type = options&.response_type
-      return :binary if response_type.nil? || response_type == CaptureResponseType::BINARY
-      return :json if response_type == CaptureResponseType::JSON
-
-      nil
-    end
-
-    def decode_success_response(raw_response, expected_kind)
-      actual_kind = json_media_type?(raw_response.content_type) ? :json : :binary
-      if !expected_kind.nil? && actual_kind != expected_kind
-        message = "Screenshot Scout returned a successful #{actual_kind} response " \
-                  "when #{expected_kind} was requested."
-        cause = TypeError.new("Expected a #{expected_kind} response but received #{actual_kind}.")
-        raise ResponseDecodingError.new(message, raw_response), cause: cause
-      end
-
-      actual_kind == :json ? decode_json_response(raw_response) : decode_binary_response(raw_response)
-    end
-
-    def decode_binary_response(raw_response)
-      BinaryCaptureResponse.new(
-        raw_response: raw_response,
-        screenshot_url: raw_response.header("Screenshot-Scout-Screenshot-URL").first,
-        screenshot_url_expires_at: raw_response.header("Screenshot-Scout-Screenshot-URL-Expires-At").first,
-        cache_status: raw_response.header("Screenshot-Scout-Cache-Status").first,
-        markdown: markdown_media_type?(raw_response.content_type) ? utf8_text(raw_response.body) : nil,
-        html: html_media_type?(raw_response.content_type) ? utf8_text(raw_response.body) : nil
-      )
-    end
-
-    def decode_json_response(raw_response)
-      value = parse_json_success(raw_response)
-      unless value.is_a?(Hash)
-        cause = TypeError.new("Expected a JSON object.")
-        raise ResponseDecodingError.new(
-          "Screenshot Scout returned a successful JSON response that was not an object.",
-          raw_response
-        ), cause: cause
-      end
-
-      screenshot_url = read_optional_string(value, "screenshot_url", raw_response)
-      expires_at = read_optional_string(value, "screenshot_url_expires_at", raw_response)
-      cache_status = read_optional_string(value, "cache_status", raw_response)
-      additional_fields = value.except("screenshot_url", "screenshot_url_expires_at", "cache_status")
-      result = CaptureResult.new(
-        screenshot_url: screenshot_url,
-        screenshot_url_expires_at: expires_at,
-        cache_status: cache_status,
-        additional_fields: additional_fields
-      )
-      JsonCaptureResponse.new(result: result, raw_response: raw_response)
-    end
-
-    def parse_json_success(raw_response)
-      Internal::JsonCodec.parse(raw_response.body)
-    rescue JSON::ParserError, EncodingError => e
-      raise ResponseDecodingError.new(
-        "Screenshot Scout returned a successful JSON response that could not be decoded.",
-        raw_response
-      ), cause: e
-    end
-
-    def read_optional_string(object, key, raw_response)
-      return nil unless object.key?(key)
-      return object[key] if object[key].is_a?(String)
-
-      cause = TypeError.new("Expected \"#{key}\" to be a string.")
-      raise ResponseDecodingError.new(
-        "Screenshot Scout returned a non-string \"#{key}\" JSON field.",
-        raw_response
-      ), cause: cause
-    end
-
-    def create_api_error(raw_response)
-      available, response_body = try_parse_json(raw_response.body)
-      object = response_body if response_body.is_a?(Hash)
-      error_code = object["error_code"] if object&.fetch("error_code", nil).is_a?(String)
-      error_message = object["error_message"] if object&.fetch("error_message", nil).is_a?(String)
-      errors = object["errors"] if object&.fetch("errors", nil).is_a?(Array)
-
-      APIError.new(
-        raw_response: raw_response,
-        response_body_available: available,
-        response_body: response_body,
-        error_code: error_code,
-        error_message: error_message,
-        errors: errors
-      )
-    end
-
-    def try_parse_json(body)
-      [true, Internal::JsonCodec.parse(body)]
-    rescue JSON::ParserError, EncodingError
-      [false, nil]
-    end
-
-    def json_media_type?(content_type)
-      return false if content_type.nil?
-
-      media_type = content_type.partition(";").first.strip.downcase
-      media_type == "application/json" || media_type.end_with?("+json")
-    end
-
-    def markdown_media_type?(content_type) = content_type.to_s.partition(";").first.strip.downcase == "text/markdown"
-
-    def html_media_type?(content_type) = content_type.to_s.partition(";").first.strip.downcase == "text/html"
-
-    def utf8_text(bytes) = bytes.dup.force_encoding(Encoding::UTF_8).scrub
 
     private_constant :ACCESS_KEY_PATTERN
   end

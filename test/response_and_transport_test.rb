@@ -209,6 +209,49 @@ class ResponseAndTransportTest < Minitest::Test
     assert_equal 1, transport.requests.length
   end
 
+  def test_capture_from_html_decodes_responses_the_same_way_as_capture
+    html = "<!doctype html><title>Invoice #1042</title>"
+    pdf = TestResponses.binary(
+      body: "%PDF".b,
+      headers: {
+        "content-type" => ["application/pdf"],
+        "screenshot-scout-screenshot-url" => ["https://cdn.example/invoice.pdf"]
+      }
+    )
+    json = TestResponses.json(body: JSON.generate("screenshot_url" => "https://cdn.example/invoice.png"))
+
+    binary_response = client(RecordingTransport.new(pdf)).capture_from_html(
+      html,
+      ScreenshotScout::CaptureOptions.new(format: ScreenshotScout::CaptureFormat::PDF)
+    )
+    json_response = client(RecordingTransport.new(json)).capture_from_html(
+      html,
+      ScreenshotScout::CaptureOptions.new(response_type: ScreenshotScout::CaptureResponseType::JSON)
+    )
+
+    assert_instance_of ScreenshotScout::BinaryCaptureResponse, binary_response
+    assert_equal "%PDF".b, binary_response.bytes
+    assert_equal "https://cdn.example/invoice.pdf", binary_response.screenshot_url
+    assert_instance_of ScreenshotScout::JsonCaptureResponse, json_response
+    assert_equal "https://cdn.example/invoice.png", json_response.result.screenshot_url
+  end
+
+  def test_a_body_over_the_api_size_limit_arrives_as_an_api_error
+    body = '{"error_code":"request_too_large","error_message":"The request body must be at most 5 MB."}'
+    raw = TestResponses.json(body: body, status: 413, reason_phrase: "Content Too Large")
+
+    error = assert_raises(ScreenshotScout::APIError) do
+      client(RecordingTransport.new(raw)).capture_from_html("<!doctype html><title>Invoice #1042</title>")
+    end
+
+    assert_equal 413, error.status
+    assert_equal "request_too_large", error.error_code
+    assert_equal "The request body must be at most 5 MB.", error.error_message
+    assert_equal "The request body must be at most 5 MB.", error.message
+    assert_equal "application/json", error.raw_response.content_type
+    assert_same raw, error.raw_response
+  end
+
   def test_valid_json_null_api_body_is_distinguishable_from_invalid_json
     raw = TestResponses.json(body: "null", status: 500, reason_phrase: "Internal Server Error")
 

@@ -82,16 +82,20 @@ module ScreenshotScout
         cookies headers hide_selectors click_selectors click_all_selectors inject_css inject_js
       ].freeze
 
+      # What a capture renders, written before the options, and how error messages name it.
+      TARGETS = { url: "The capture target URL", html: "The HTML to capture" }.freeze
+
       module_function
 
-      def serialize(target_url, options)
-        url = string_value(target_url, :url, target: true)
+      def serialize(target_value, options, target: :url)
+        target_value = utf8_from_binary(target_value) if target == :html
+        target_text = string_value(target_value, target, subject: TARGETS.fetch(target))
         unless options.nil? || options.is_a?(CaptureOptions)
           raise SerializationError, "Capture options must be a ScreenshotScout::CaptureOptions instance when provided."
         end
 
-        pairs = [WirePair.new(name: "url", value: url)]
-        body = { "url" => url }
+        pairs = [WirePair.new(name: target.name, value: target_text)]
+        body = { target.name => target_text }
         WIRE_NAMES.each do |property, wire_name|
           value = options&.public_send(property)
           next if value.nil?
@@ -189,15 +193,17 @@ module ScreenshotScout
       end
       private_class_method :integer_value
 
-      def string_value(value, property, target: false)
-        unless value.is_a?(String)
-          message = if target
-                      "The capture target URL must be a string."
-                    else
-                      "The capture option \"#{property}\" must be a string."
-                    end
-          raise SerializationError.new(message, option: property)
-        end
+      # HTML often comes from File.binread or an HTTP response body, so a binary string is read as UTF-8 bytes,
+      # which string_value then checks. The copy leaves the caller's string as it was.
+      def utf8_from_binary(value)
+        return value unless value.is_a?(String) && value.encoding == Encoding::BINARY
+
+        value.dup.force_encoding(Encoding::UTF_8)
+      end
+      private_class_method :utf8_from_binary
+
+      def string_value(value, property, subject: "The capture option \"#{property}\"")
+        raise SerializationError.new("#{subject} must be a string.", option: property) unless value.is_a?(String)
 
         string = value.encode(Encoding::UTF_8)
         # encode doesn't check the bytes of a string that is already tagged as UTF-8.
@@ -205,12 +211,7 @@ module ScreenshotScout
 
         string
       rescue EncodingError => e
-        message = if target
-                    "The capture target URL must contain valid UTF-8."
-                  else
-                    "The capture option \"#{property}\" must contain valid UTF-8."
-                  end
-        raise SerializationError.new(message, option: property), cause: e
+        raise SerializationError.new("#{subject} must contain valid UTF-8.", option: property), cause: e
       end
       private_class_method :string_value
 

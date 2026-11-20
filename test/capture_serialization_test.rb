@@ -9,6 +9,9 @@ class CaptureSerializationTest < Minitest::Test
   SIGNED_TARGET = "https://example.com/a b?x=1&y=2"
   SIGNED_SIGNATURE = "6419f2ac8c0440f1e341b547630606c9dc74dacfbb2df8e122fc9ae26831d893"
 
+  INVOICE_HTML = "<!doctype html>\n<html><head><title>Invoice #1042</title></head>" \
+                 "<body><h1>Invoice #1042 for Zoë & \"Café\"</h1></body></html>\n"
+
   def test_configuration_validates_credentials_and_transport
     assert_raises(ScreenshotScout::ConfigurationError) { ScreenshotScout::Client.new(access_key: 123) }
     assert_raises(ScreenshotScout::ConfigurationError) do
@@ -564,6 +567,146 @@ class CaptureSerializationTest < Minitest::Test
 
     assert_raises(ScreenshotScout::SerializationError) do
       ScreenshotScout::CaptureOptions.new(unknown_option: true)
+    end
+    assert_empty transport.requests
+  end
+
+  def test_capture_from_html_sends_the_html_first_in_a_post_body_exactly_as_given
+    transport = RecordingTransport.new
+    options = ScreenshotScout::CaptureOptions.new(
+      format: ScreenshotScout::CaptureFormat::PDF,
+      pdf_print_background: true,
+      cookies: ["session=abc; Domain=example.com"]
+    )
+
+    client(transport, access_key: "ak_test").capture_from_html("  #{INVOICE_HTML}  ", options)
+
+    assert_equal 1, transport.requests.length
+    request = transport.requests.fetch(0)
+    assert_equal ScreenshotScout::CaptureHttpMethod::POST, request.method
+    assert_equal "https://api.screenshotscout.com/v1/capture", request.url
+    assert_nil URI.parse(request.url).query
+    assert_equal "Bearer ak_test", request.headers.fetch("Authorization")
+    assert_equal "application/json", request.headers.fetch("Content-Type")
+    body = JSON.parse(request.body)
+    assert_equal %w[html format cookies pdf_print_background], body.keys
+    assert_equal "  #{INVOICE_HTML}  ", body.fetch("html")
+    assert_equal "pdf", body.fetch("format")
+    assert_includes request.body, '<title>Invoice #1042</title></head><body><h1>Invoice #1042 for Zoë & \"Café\"'
+  end
+
+  def test_capture_from_html_refuses_before_sending_when_the_client_has_a_secret_key
+    transport = RecordingTransport.new
+    screenshot_client = client(transport, access_key: "ak_test", secret_key: "sk_test")
+
+    error = assert_raises(ScreenshotScout::ConfigurationError) do
+      screenshot_client.capture_from_html(INVOICE_HTML)
+    end
+
+    assert_equal(
+      "`capture_from_html` sends the HTML in a POST body, which can't be signed. This client has a secret key: " \
+      "use a client without a secret key and an API key that doesn't require signed requests.",
+      error.message
+    )
+    assert_empty transport.requests
+  end
+
+  def test_capture_from_html_names_the_variable_a_secret_key_came_from
+    transport = RecordingTransport.new
+
+    error = with_env(
+      "SCREENSHOTSCOUT_ACCESS_KEY" => "ak_env",
+      "SCREENSHOTSCOUT_SECRET_KEY" => "sk_env"
+    ) do
+      screenshot_client = ScreenshotScout::Client.new(transport: transport)
+      assert_raises(ScreenshotScout::ConfigurationError) { screenshot_client.capture_from_html(INVOICE_HTML) }
+    end
+
+    assert_equal(
+      "`capture_from_html` sends the HTML in a POST body, which can't be signed. This client has a secret key " \
+      "from SCREENSHOTSCOUT_SECRET_KEY: use a client without a secret key and an API key that doesn't require " \
+      "signed requests.",
+      error.message
+    )
+    assert_empty transport.requests
+  end
+
+  def test_capture_from_html_checks_only_that_the_html_is_valid_text
+    transport = RecordingTransport.new
+    screenshot_client = client(transport)
+    invalid = "<p>caf\xC3</p>".dup.force_encoding(Encoding::UTF_8)
+    cases = [nil, 42, :html, ["<p>a</p>"]].map { |html| [html, "The HTML to capture must be a string."] } +
+            [[invalid, "The HTML to capture must contain valid UTF-8."]]
+
+    cases.each do |html, message|
+      error = assert_raises(ScreenshotScout::SerializationError) { screenshot_client.capture_from_html(html) }
+
+      assert_equal :html, error.option
+      assert_equal message, error.message
+    end
+    assert_empty transport.requests
+
+    # Empty HTML is the API's to judge.
+    screenshot_client.capture_from_html("")
+    assert_equal({ "html" => "" }, JSON.parse(transport.requests.fetch(0).body))
+  end
+
+  def test_capture_from_html_sends_a_binary_string_of_utf8_bytes_unchanged
+    transport = RecordingTransport.new
+    html = "<!doctype html><title>Café 中文</title><p>é 中</p>".b
+    original_bytes = html.dup
+
+    client(transport).capture_from_html(
+      html,
+      ScreenshotScout::CaptureOptions.new(format: ScreenshotScout::CaptureFormat::PDF)
+    )
+
+    assert_equal Encoding::BINARY, html.encoding
+    assert_equal original_bytes, html
+    request = transport.requests.fetch(0)
+    assert_equal ScreenshotScout::CaptureHttpMethod::POST, request.method
+    assert request.body.b.start_with?("{\"html\":\"".b + original_bytes), "The body starts with the HTML's own bytes."
+    body = JSON.parse(request.body)
+    assert_equal %w[html format], body.keys
+    assert_equal "<!doctype html><title>Café 中文</title><p>é 中</p>", body.fetch("html")
+  end
+
+  def test_capture_from_html_refuses_a_binary_string_that_is_not_utf8_and_url_is_unchanged
+    transport = RecordingTransport.new
+    screenshot_client = client(transport)
+
+    html_error = assert_raises(ScreenshotScout::SerializationError) do
+      screenshot_client.capture_from_html("<p>caf\xC3</p>".b)
+    end
+    url_error = assert_raises(ScreenshotScout::SerializationError) do
+      screenshot_client.capture("https://example.com/café".b)
+    end
+
+    assert_equal :html, html_error.option
+    assert_equal "The HTML to capture must contain valid UTF-8.", html_error.message
+    assert_equal :url, url_error.option
+    assert_equal "The capture target URL must contain valid UTF-8.", url_error.message
+    assert_empty transport.requests
+  end
+
+  def test_neither_capture_method_takes_a_target_as_an_option_and_capture_from_html_has_no_method
+    transport = RecordingTransport.new
+    screenshot_client = client(transport)
+
+    %i[html url].each do |name|
+      error = assert_raises(ScreenshotScout::SerializationError) do
+        ScreenshotScout::CaptureOptions.new(name => "https://example.com")
+      end
+      assert_equal name, error.option
+      assert_equal "Unknown capture option \"#{name}\".", error.message
+    end
+    error = assert_raises(ScreenshotScout::SerializationError) do
+      screenshot_client.capture_from_html(INVOICE_HTML, url: "https://example.com")
+    end
+    assert_equal "Capture options must be a ScreenshotScout::CaptureOptions instance when provided.", error.message
+    assert_raises(ArgumentError) { screenshot_client.capture("https://example.com", html: INVOICE_HTML) }
+    assert_raises(ArgumentError) do
+      screenshot_client.capture_from_html(INVOICE_HTML, nil, method: ScreenshotScout::CaptureHttpMethod::GET)
     end
     assert_empty transport.requests
   end
